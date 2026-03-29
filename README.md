@@ -1,0 +1,1 @@
+# trading-app-dym git init git add README.md git commit -m first commit git branch -M main git remote add origin https://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@github.com/maxifranco12/trading-app-dym.git git push -u origin main
