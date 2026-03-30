@@ -1,82 +1,110 @@
-"""Price alerts — almacenamiento local en JSON."""
+"""Alertas de precio/RSI en memoria (sin persistencia en disco)."""
 
 from __future__ import annotations
 
-import json
-import uuid
-from datetime import datetime, timezone
-from pathlib import Path
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from routers.market import _safe_quote
+
 router = APIRouter()
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-ALERTS_FILE = DATA_DIR / "alerts.json"
+_alerts: dict[str, dict[str, Any]] = {}
+_alert_counter: int = 0
+
+TIPOS_VALIDOS = frozenset(
+    {
+        "precio_sube",
+        "precio_baja",
+        "sube_pct",
+        "baja_pct",
+        "rsi_alto",
+        "rsi_bajo",
+    }
+)
 
 
 class AlertCreate(BaseModel):
-    symbol: str = Field(..., min_length=1)
-    target_price: float = Field(..., description="Precio objetivo")
-    direction: str = Field("above", description="above o below")
+    ticker: str = Field(..., min_length=1)
+    tipo: str
+    valor: float
 
 
-class AlertItem(BaseModel):
-    id: str
-    symbol: str
-    target_price: float
-    direction: str
-    created_at: str
-    active: bool = True
+def _eval_condicion(
+    tipo: str, valor: float, price: float, change_pct: float, rsi: Optional[float]
+) -> bool:
+    if tipo == "precio_sube":
+        return price >= valor
+    if tipo == "precio_baja":
+        return price <= valor
+    if tipo == "sube_pct":
+        return change_pct >= valor
+    if tipo == "baja_pct":
+        return change_pct <= -valor
+    if tipo == "rsi_alto":
+        return rsi is not None and rsi > valor
+    if tipo == "rsi_bajo":
+        return rsi is not None and rsi < valor
+    return False
 
 
-def _load() -> list[dict]:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    if not ALERTS_FILE.is_file():
-        return []
-    try:
-        raw = ALERTS_FILE.read_text(encoding="utf-8")
-        data = json.loads(raw)
-        return data if isinstance(data, list) else []
-    except (json.JSONDecodeError, OSError):
-        return []
+@router.get("/")
+def list_alerts() -> dict[str, Any]:
+    return {"alerts": list(_alerts.values())}
 
 
-def _save(items: list[dict]) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    ALERTS_FILE.write_text(json.dumps(items, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
-@router.get("/", response_model=list[AlertItem])
-def list_alerts() -> list[AlertItem]:
-    return [AlertItem(**x) for x in _load() if x.get("active", True)]
-
-
-@router.post("/", response_model=AlertItem)
-def create_alert(body: AlertCreate) -> AlertItem:
-    if body.direction not in ("above", "below"):
-        raise HTTPException(status_code=400, detail="direction debe ser above o below")
-    now = datetime.now(timezone.utc).isoformat()
-    item = {
-        "id": str(uuid.uuid4()),
-        "symbol": body.symbol.strip().upper(),
-        "target_price": body.target_price,
-        "direction": body.direction,
-        "created_at": now,
-        "active": True,
+@router.post("/")
+def create_alert(body: AlertCreate) -> dict[str, Any]:
+    global _alert_counter
+    t = body.ticker.strip().upper()
+    tipo = body.tipo.strip()
+    if tipo not in TIPOS_VALIDOS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"tipo inválido. Usar uno de: {', '.join(sorted(TIPOS_VALIDOS))}",
+        )
+    _alert_counter += 1
+    aid = str(_alert_counter)
+    item: dict[str, Any] = {
+        "id": aid,
+        "ticker": t,
+        "tipo": tipo,
+        "valor": float(body.valor),
+        "estado": "activa",
     }
-    all_items = _load()
-    all_items.append(item)
-    _save(all_items)
-    return AlertItem(**item)
+    _alerts[aid] = item
+    return item
 
 
 @router.delete("/{alert_id}")
 def delete_alert(alert_id: str) -> dict[str, str]:
-    items = _load()
-    new_items = [x for x in items if x.get("id") != alert_id]
-    if len(new_items) == len(items):
+    if alert_id not in _alerts:
         raise HTTPException(status_code=404, detail="Alerta no encontrada")
-    _save(new_items)
+    del _alerts[alert_id]
     return {"status": "ok", "id": alert_id}
+
+
+@router.get("/check")
+def check_alerts() -> dict[str, Any]:
+    disparadas: list[dict[str, Any]] = []
+    total_verificadas = 0
+    for aid, a in list(_alerts.items()):
+        if a.get("estado") != "activa":
+            continue
+        total_verificadas += 1
+        sym = str(a.get("ticker", "")).strip()
+        q = _safe_quote(sym)
+        if q is None:
+            continue
+        price = float(q["price"])
+        change_pct = float(q["changePct"])
+        rsi = q.get("rsi")
+        rsi_f = float(rsi) if rsi is not None else None
+        tipo = str(a.get("tipo", ""))
+        valor = float(a.get("valor", 0.0))
+        if _eval_condicion(tipo, valor, price, change_pct, rsi_f):
+            a["estado"] = "disparada"
+            disparadas.append(dict(a))
+    return {"disparadas": disparadas, "total_verificadas": total_verificadas}

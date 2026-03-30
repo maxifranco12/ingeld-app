@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException, Query
 router = APIRouter()
 
 _CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
-_QUOTE_TTL_SEC = 180.0
+_QUOTE_TTL_SEC = 120.0
 
 _ASSET_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _ASSET_TTL_SEC = 180.0
@@ -194,6 +194,35 @@ def _safe_quote(symbol: str) -> Optional[dict[str, Any]]:
         return _quote_one(symbol)
     except Exception:
         return None
+
+
+@router.get("/quotes")
+def market_quotes(
+    symbols: str = Query("", description="Símbolos separados por comas"),
+) -> dict[str, Any]:
+    """Cotizaciones compactas; usa caché de _quote_one (TTL compartido)."""
+    syms = [s.strip() for s in symbols.split(",") if s.strip()]
+    if not syms:
+        return {"quotes": []}
+
+    def _one(sym: str) -> Optional[dict[str, Any]]:
+        q = _safe_quote(sym)
+        if q is None:
+            return None
+        return {
+            "symbol": q["symbol"],
+            "name": q.get("name", q["symbol"]),
+            "price": q["price"],
+            "changePct": q["changePct"],
+            "currency": q.get("currency", ""),
+        }
+
+    out: list[dict[str, Any]] = []
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        for row in ex.map(_one, syms):
+            if row is not None:
+                out.append(row)
+    return {"quotes": out}
 
 
 def _bar_timestamp(idx: Any) -> int:

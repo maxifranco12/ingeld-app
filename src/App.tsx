@@ -7,15 +7,8 @@ import { Scanner } from './pages/Scanner'
 import { Favoritos } from './pages/Favoritos'
 import { Configuracion } from './pages/Configuracion'
 import { Activo } from './pages/Activo'
-
-function Placeholder({ title }: { title: string }) {
-  return (
-    <>
-      <h1 className="page-title">{title}</h1>
-      <p className="page-sub">Sección en construcción.</p>
-    </>
-  )
-}
+import { Portfolio } from './pages/Portfolio'
+import { Alertas } from './pages/Alertas'
 
 export default function App() {
   return (
@@ -27,9 +20,9 @@ export default function App() {
           <Route path="favoritos" element={<Favoritos />} />
           <Route path="buscador" element={<Buscador />} />
           <Route path="activo/:symbol" element={<Activo />} />
-          <Route path="portfolio" element={<Placeholder title="Portfolio" />} />
+          <Route path="portfolio" element={<Portfolio />} />
           <Route path="configuracion" element={<Configuracion />} />
-          <Route path="alertas" element={<Placeholder title="Alertas" />} />
+          <Route path="alertas" element={<Alertas />} />
           <Route path="analisis" element={<Analisis />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -172,18 +172,26 @@ def chat_analizar(req: AnalizarRequest) -> AnalizarResponse:
 
     system = SYSTEM_BASE
     if not req.historial:
-        snap = _snapshot_tecnico(ticker)
-        if snap is None:
-            raise HTTPException(
-                status_code=404,
-                detail="No se pudieron obtener datos históricos suficientes para el ticker.",
+        if ticker.upper() == "PORTFOLIO":
+            system = (
+                SYSTEM_BASE
+                + "\n\nEl usuario describe su cartera completa en el mensaje (posiciones, cantidades, precios, P&L). "
+                "Analizá diversificación, riesgo, exposición sectorial/geográfica si se infiere, "
+                "y sugerencias concretas en español. No inventes tickers que no figuren en el mensaje."
             )
-        system = (
-            SYSTEM_BASE
-            + "\n\nTenés acceso a los siguientes indicadores técnicos calculados con datos recientes (yfinance, cierre diario). "
-            "Usalos como referencia objetiva en tus respuestas:\n\n"
-            + _format_indicators_block(snap)
-        )
+        else:
+            snap = _snapshot_tecnico(ticker)
+            if snap is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="No se pudieron obtener datos históricos suficientes para el ticker.",
+                )
+            system = (
+                SYSTEM_BASE
+                + "\n\nTenés acceso a los siguientes indicadores técnicos calculados con datos recientes (yfinance, cierre diario). "
+                "Usalos como referencia objetiva en tus respuestas:\n\n"
+                + _format_indicators_block(snap)
+            )
     else:
         system = (
             SYSTEM_BASE
