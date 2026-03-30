@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { PageBackButton } from '../components/PageBackButton'
 import { useFavoritos } from '../hooks/useFavoritos'
 
+const BASE_URL = import.meta.env.VITE_API_URL ?? ''
+
 type OverviewItem = {
   symbol: string
   name: string
@@ -35,7 +37,7 @@ export function Favoritos() {
     setError(null)
     try {
       const q = favoritos.map(encodeURIComponent).join(',')
-      const res = await fetch(`/api/market/overview?symbols=${q}`)
+      const res = await fetch(`${BASE_URL}/api/market/overview?symbols=${q}`)
       if (!res.ok) throw new Error(await res.text())
       const j = (await res.json()) as { items: OverviewItem[] }
       setItems(j.items ?? [])

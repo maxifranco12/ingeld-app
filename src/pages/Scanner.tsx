@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { PageBackButton } from '../components/PageBackButton'
 import { useFavoritos } from '../hooks/useFavoritos'
 
+const BASE_URL = import.meta.env.VITE_API_URL ?? ''
+
 type Candidato = {
   ticker: string
   nombre: string
@@ -63,7 +65,7 @@ export function Scanner() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/scanner/candidatos')
+      const res = await fetch(`${BASE_URL}/api/scanner/candidatos`)
       if (!res.ok) {
         const t = await res.text()
         throw new Error(t || `HTTP ${res.status}`)
