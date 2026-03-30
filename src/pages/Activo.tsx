@@ -196,21 +196,6 @@ async function postAnalizar(ticker: string, mensaje: string) {
   return (j.respuesta ?? '').trim()
 }
 
-function parseNewsTranslationJson(text: string): Array<{ titulo: string; descripcion: string }> {
-  let t = text.trim()
-  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/)
-  if (fence) t = fence[1].trim()
-  const arr = JSON.parse(t) as unknown
-  if (!Array.isArray(arr)) throw new Error('Respuesta no es un array JSON')
-  return arr.map((row) => {
-    const o = row as Record<string, unknown>
-    return {
-      titulo: String(o.titulo ?? ''),
-      descripcion: String(o.descripcion ?? ''),
-    }
-  })
-}
-
 function sourceBadgeClass(source: string | undefined): string {
   const s = (source || '').toLowerCase()
   if (s.includes('bloomberg')) return 'news-source-bloomberg'
@@ -247,11 +232,11 @@ export function Activo() {
   const [aboutShowEs, setAboutShowEs] = useState(false)
   const [aboutTranslating, setAboutTranslating] = useState(false)
 
-  const [newsTranslatedPairs, setNewsTranslatedPairs] = useState<
-    Array<{ titulo: string; descripcion: string }> | null
-  >(null)
-  const [newsShowEs, setNewsShowEs] = useState(false)
-  const [newsTranslating, setNewsTranslating] = useState(false)
+  const [newsTranslations, setNewsTranslations] = useState<
+    Record<number, { titulo: string; descripcion: string }>
+  >({})
+  const [newsTranslating, setNewsTranslating] = useState<Record<number, boolean>>({})
+  const [newsShowEs, setNewsShowEs] = useState<Record<number, boolean>>({})
 
   const load = useCallback(async () => {
     if (!symbol) return
@@ -317,9 +302,9 @@ export function Activo() {
     setAboutTextEs(null)
     setAboutShowEs(false)
     setAboutTranslating(false)
-    setNewsTranslatedPairs(null)
-    setNewsShowEs(false)
-    setNewsTranslating(false)
+    setNewsTranslations({})
+    setNewsShowEs({})
+    setNewsTranslating({})
   }, [data?.symbol])
 
   const handleAboutTranslateClick = () => {
@@ -353,38 +338,35 @@ export function Activo() {
     })()
   }
 
-  const handleNewsTranslateClick = () => {
-    if (!data || !newsData?.noticias?.length) return
-    if (newsShowEs) {
-      setNewsShowEs(false)
+  const handleTranslateNews = async (idx: number, n: NewsItem) => {
+    if (!data) return
+    if (newsTranslations[idx]) {
+      setNewsShowEs((p) => ({ ...p, [idx]: !p[idx] }))
       return
     }
-    if (newsTranslatedPairs && newsTranslatedPairs.length === newsData.noticias.length) {
-      setNewsShowEs(true)
-      return
+    setNewsTranslating((p) => ({ ...p, [idx]: true }))
+    try {
+      const res = await fetch(`${API}/api/chat/analizar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticker: data.symbol,
+          historial: [],
+          mensaje: `Traducí al español. Devolvé SOLO JSON sin markdown: {"titulo": "...", "descripcion": "..."}
+Título: ${n.titulo}
+Descripción: ${n.descripcion || ''}`,
+        }),
+      })
+      const json = (await res.json()) as { respuesta?: string }
+      const text = (json.respuesta ?? '').replace(/```json|```/g, '').trim()
+      const parsed = JSON.parse(text) as { titulo: string; descripcion: string }
+      setNewsTranslations((p) => ({ ...p, [idx]: parsed }))
+      setNewsShowEs((p) => ({ ...p, [idx]: true }))
+    } catch {
+      /* noop */
+    } finally {
+      setNewsTranslating((p) => ({ ...p, [idx]: false }))
     }
-    setNewsTranslating(true)
-    void (async () => {
-      try {
-        const lista = newsData.noticias.map((n) => ({
-          titulo: n.titulo,
-          descripcion: n.descripcion ?? '',
-        }))
-        const payload = JSON.stringify(lista)
-        const mensaje = `Traducí al español estos títulos y descripciones de noticias. Devolvé SOLO un JSON array con objetos {titulo, descripcion} en el mismo orden: ${payload}`
-        const resp = await postAnalizar(data.symbol, mensaje)
-        const parsed = parseNewsTranslationJson(resp)
-        if (parsed.length !== newsData.noticias.length) {
-          throw new Error('Cantidad de ítems no coincide')
-        }
-        setNewsTranslatedPairs(parsed)
-        setNewsShowEs(true)
-      } catch {
-        /* noop */
-      } finally {
-        setNewsTranslating(false)
-      }
-    })()
   }
 
   const runFundamentalIa = async () => {
@@ -983,19 +965,6 @@ export function Activo() {
               <h2 id="news-h" className="dash-zone-title activo-subsec-title--row">
                 Noticias
               </h2>
-              {newsData?.noticias?.length ? (
-                <button
-                  type="button"
-                  className="activo-translate-btn"
-                  onClick={handleNewsTranslateClick}
-                  disabled={newsTranslating}
-                >
-                  {newsTranslating ? (
-                    <span className="activo-translate-spinner" aria-hidden />
-                  ) : null}
-                  {newsShowEs && newsTranslatedPairs ? 'Ver en inglés' : 'Traducir noticias'}
-                </button>
-              ) : null}
             </div>
             {newsLoading && (
               <p className="page-sub font-prose">Analizando noticias con IA…</p>
@@ -1015,12 +984,12 @@ export function Activo() {
             {newsData?.noticias?.length ? (
               <div className="news-cards-grid">
                 {newsData.noticias.map((n, idx) => {
-                  const pair =
-                    newsShowEs && newsTranslatedPairs
-                      ? newsTranslatedPairs[idx]
-                      : undefined
-                  const titulo = pair?.titulo ?? n.titulo
-                  const desc = pair?.descripcion ?? (n.descripcion ?? '')
+                  const titulo = newsShowEs[idx]
+                    ? (newsTranslations[idx]?.titulo ?? n.titulo)
+                    : n.titulo
+                  const desc = newsShowEs[idx]
+                    ? (newsTranslations[idx]?.descripcion ?? n.descripcion)
+                    : n.descripcion
                   return (
                     <article key={`${n.url}-${idx}`} className="news-card">
                       <div className="news-card-badges">
@@ -1059,6 +1028,19 @@ export function Activo() {
                       {n.analisis ? (
                         <p className="news-card-ai font-prose">{n.analisis}</p>
                       ) : null}
+                      <button
+                        type="button"
+                        className="activo-translate-btn news-card-translate-btn"
+                        onClick={() => void handleTranslateNews(idx, n)}
+                        disabled={!!newsTranslating[idx]}
+                      >
+                        {newsTranslating[idx] ? (
+                          <span className="activo-translate-spinner" aria-hidden />
+                        ) : null}
+                        {newsShowEs[idx]
+                          ? 'Ver en inglés'
+                          : 'Traducir al español'}
+                      </button>
                     </article>
                   )
                 })}

@@ -2726,6 +2726,10 @@ button {
   color: var(--text-body);
 }
 
+.news-card-translate-btn {
+  margin-top: 0.5rem;
+}
+
 /* Portfolio */
 .portfolio-page {
   max-width: 960px;
