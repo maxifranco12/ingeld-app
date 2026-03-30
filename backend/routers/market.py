@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import math
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
@@ -316,6 +317,65 @@ def _norm_chart_range(r: str) -> str:
     return u if u in _ASSET_PERIOD_MAP else "6M"
 
 
+def _scalar_json(v: Any) -> Any:
+    """Convierte valores de yfinance a tipos JSON-serializables."""
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str):
+        return v
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float):
+        if math.isnan(v) or math.isinf(v):
+            return None
+        return v
+    try:
+        x = float(v)
+        if math.isnan(x) or math.isinf(x):
+            return None
+        if abs(x - round(x)) < 1e-9 and abs(x) < 1e15:
+            return int(round(x))
+        return x
+    except (TypeError, ValueError, OverflowError):
+        return str(v) if v is not None else None
+
+
+def fundamentals_from_info(info: dict[str, Any]) -> dict[str, Any]:
+    """Métricas fundamentales desde ticker.info (yfinance)."""
+    raw_desc = info.get("longBusinessSummary") or ""
+    if not isinstance(raw_desc, str):
+        raw_desc = str(raw_desc) if raw_desc is not None else ""
+    desc = raw_desc[:500] if len(raw_desc) > 500 else raw_desc
+
+    def pick(key: str) -> Any:
+        return _scalar_json(info.get(key))
+
+    return {
+        "pe_ratio": pick("trailingPE"),
+        "pb_ratio": pick("priceToBook"),
+        "ps_ratio": pick("priceToSalesTrailing12Months"),
+        "eps": pick("trailingEps"),
+        "revenue": pick("totalRevenue"),
+        "revenue_growth": pick("revenueGrowth"),
+        "earnings_growth": pick("earningsGrowth"),
+        "profit_margin": pick("profitMargins"),
+        "debt_to_equity": pick("debtToEquity"),
+        "roe": pick("returnOnEquity"),
+        "free_cash_flow": pick("freeCashflow"),
+        "market_cap": pick("marketCap"),
+        "dividend_yield": pick("dividendYield"),
+        "52w_high": pick("fiftyTwoWeekHigh"),
+        "52w_low": pick("fiftyTwoWeekLow"),
+        "target_price": pick("targetMeanPrice"),
+        "analyst_recommendation": pick("recommendationKey"),
+        "sector": pick("sector"),
+        "industry": pick("industry"),
+        "description": desc,
+    }
+
+
 def _asset_payload_impl(symbol: str, chart_range: str) -> dict[str, Any]:
     sym = symbol.strip()
     cr = _norm_chart_range(chart_range)
@@ -419,6 +479,7 @@ def _asset_payload_impl(symbol: str, chart_range: str) -> dict[str, Any]:
             "moneda": str(info.get("currency") or ""),
             "descripcion": desc,
         },
+        "fundamentals": fundamentals_from_info(info),
     }
 
 

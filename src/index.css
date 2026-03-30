@@ -1911,7 +1911,7 @@ button {
 
 /* Vista activo */
 .activo-page {
-  max-width: 900px;
+  max-width: 960px;
   margin: 0 auto;
 }
 
@@ -2145,6 +2145,451 @@ button {
   line-height: 1.55;
   color: var(--text-muted);
   margin: 0;
+}
+
+/* Activo — fundamental & noticias */
+.activo-fundamental {
+  margin-top: 1.75rem;
+}
+
+.activo-subsec-title {
+  margin: 1.35rem 0 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.fundamental-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  gap: 0.75rem;
+}
+
+.metric-card {
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  box-shadow: var(--shadow);
+}
+
+.metric-card--wide {
+  grid-column: span 2;
+}
+
+@media (max-width: 560px) {
+  .metric-card--wide {
+    grid-column: span 1;
+  }
+}
+
+.metric-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.metric-card-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.metric-card-val {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.metric-semaforo {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.metric-semaforo--green {
+  background: var(--gain);
+  box-shadow: 0 0 0 2px rgba(10, 124, 82, 0.25);
+}
+
+.metric-semaforo--yellow {
+  background: #ca8a04;
+  box-shadow: 0 0 0 2px rgba(202, 138, 4, 0.28);
+}
+
+.metric-semaforo--red {
+  background: var(--loss);
+  box-shadow: 0 0 0 2px rgba(192, 41, 62, 0.25);
+}
+
+.metric-semaforo--muted {
+  background: var(--border);
+}
+
+.metric-progress-wrap {
+  height: 6px;
+  margin-top: 0.45rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.metric-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), #0a7c52);
+  transition: width 0.35s ease;
+}
+
+.metric-progress-fill--growth {
+  background: linear-gradient(90deg, #2563eb, var(--accent));
+}
+
+.metric-progress-fill--roe {
+  background: linear-gradient(90deg, #7c3aed, var(--accent));
+}
+
+.activo-target-block {
+  padding: 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: #faf9f7;
+}
+
+.activo-target-line {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+}
+
+.activo-upside {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.activo-reco {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+.activo-target-muted {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.price-range-bar-wrap {
+  margin-top: 0.5rem;
+}
+
+.price-range-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+
+.price-range-mid {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.price-range-bar {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(192, 41, 62, 0.35),
+    rgba(202, 138, 4, 0.35),
+    rgba(10, 124, 82, 0.45)
+  );
+}
+
+.price-range-marker {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.activo-about {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.activo-badge-sector,
+.activo-badge-industry {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(0, 168, 122, 0.08);
+  color: var(--text-heading);
+}
+
+.activo-badge-industry {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.activo-about-desc {
+  flex: 1 1 100%;
+  margin: 0.5rem 0 0;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--text-body);
+}
+
+.activo-fund-ia-toolbar {
+  margin-top: 1rem;
+}
+
+.activo-fund-ia-btn {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.55rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent);
+  background: var(--bg-card);
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.activo-fund-ia-btn:hover:not(:disabled) {
+  background: rgba(0, 168, 122, 0.08);
+}
+
+.activo-fund-ia-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.activo-fund-ia-panel {
+  margin-top: 0.85rem;
+}
+
+.activo-fund-ia-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.valuation-badge {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.valuation-badge--infra {
+  background: rgba(10, 124, 82, 0.15);
+  color: var(--gain);
+  border-color: rgba(10, 124, 82, 0.35);
+}
+
+.valuation-badge--justa {
+  background: rgba(176, 122, 16, 0.14);
+  color: #a16207;
+  border-color: rgba(176, 122, 16, 0.3);
+}
+
+.valuation-badge--sobre {
+  background: rgba(192, 41, 62, 0.12);
+  color: var(--loss);
+  border-color: rgba(192, 41, 62, 0.28);
+}
+
+.activo-fund-meta {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.activo-fund-lists {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.activo-fund-mini-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.activo-fund-ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: var(--text-body);
+}
+
+.activo-fund-resumen {
+  margin-top: 0.25rem;
+}
+
+.activo-noticias {
+  margin-top: 2rem;
+}
+
+.news-macro {
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--text-body);
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+  background: #faf9f7;
+}
+
+.oportunidad-banner {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #0a5c3a;
+  background: linear-gradient(
+    90deg,
+    rgba(10, 124, 82, 0.18),
+    rgba(0, 168, 122, 0.12)
+  );
+  border: 1px solid rgba(10, 124, 82, 0.35);
+}
+
+.news-cards-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.news-card {
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.news-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.07);
+  border-color: rgba(0, 168, 122, 0.25);
+}
+
+.news-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+}
+
+.news-badge-positivo {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(10, 124, 82, 0.15);
+  color: var(--gain);
+}
+
+.news-badge-negativo {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(192, 41, 62, 0.14);
+  color: var(--loss);
+}
+
+.news-badge-neutro {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text-muted);
+}
+
+.news-badge-oportunidad {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(202, 138, 4, 0.22);
+  color: #92400e;
+  border: 1px solid rgba(202, 138, 4, 0.4);
+}
+
+.news-card-title {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  line-height: 1.35;
+}
+
+.news-card-title:hover {
+  text-decoration: underline;
+}
+
+.news-card-time {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.news-card-ai {
+  margin: 0.45rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-body);
 }
 
 /* Portfolio */

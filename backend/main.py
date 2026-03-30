@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import alerts, analysis, market
+from routers import alerts, analysis, market, news
 from routers.chat import router as chat_router
 from routers.scanner import router as scanner_router
 
@@ -33,6 +33,7 @@ app.add_middleware(
 
 app.include_router(market.router, prefix="/api/market", tags=["market"])
 app.include_router(analysis.router, prefix="/api/analysis", tags=["analysis"])
+app.include_router(news.router, prefix="/api/news", tags=["news"])
 app.include_router(alerts.router, prefix="/api/alerts", tags=["alerts"])
 app.include_router(scanner_router, prefix="/api/scanner", tags=["scanner"])
 app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
