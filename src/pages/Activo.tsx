@@ -96,6 +96,8 @@ type NewsItem = {
   titulo: string
   fecha: string
   url: string
+  fuente?: string
+  descripcion?: string
   impacto: string
   es_fundamental: boolean
   analisis: string
@@ -178,6 +180,16 @@ function recoLabel(key: string | null | undefined): string {
     strong_sell: 'Venta fuerte',
   }
   return map[k] ?? key
+}
+
+function sourceBadgeClass(source: string | undefined): string {
+  const s = (source || '').toLowerCase()
+  if (s.includes('bloomberg')) return 'news-source-bloomberg'
+  if (s.includes('cnbc')) return 'news-source-cnbc'
+  if (s.includes('reuters')) return 'news-source-reuters'
+  if (s.includes('financial times') || s === 'ft' || s.includes(' ft ')) return 'news-source-ft'
+  if (s.includes('wall street journal') || s.includes('wsj')) return 'news-source-wsj'
+  return 'news-source-other'
 }
 
 export function Activo() {
@@ -879,6 +891,14 @@ export function Activo() {
                     >
                       {n.titulo}
                     </a>
+                    <div className="news-source-row">
+                      <span className={`news-source-badge ${sourceBadgeClass(n.fuente)}`}>
+                        {n.fuente || 'Fuente'}
+                      </span>
+                    </div>
+                    {n.descripcion ? (
+                      <p className="news-card-desc font-prose">{n.descripcion}</p>
+                    ) : null}
                     <p className="news-card-time">{relTimeEs(n.fecha)}</p>
                     {n.analisis ? (
                       <p className="news-card-ai font-prose">{n.analisis}</p>

@@ -2602,6 +2602,63 @@ button {
   text-decoration: underline;
 }
 
+.news-source-row {
+  margin-top: 0.35rem;
+}
+
+.news-source-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.18rem 0.42rem;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+
+.news-source-bloomberg {
+  background: #111;
+  color: #fff;
+}
+
+.news-source-cnbc {
+  background: rgba(37, 99, 235, 0.14);
+  color: #1d4ed8;
+  border-color: rgba(37, 99, 235, 0.3);
+}
+
+.news-source-reuters {
+  background: rgba(249, 115, 22, 0.14);
+  color: #c2410c;
+  border-color: rgba(249, 115, 22, 0.3);
+}
+
+.news-source-ft {
+  background: rgba(251, 113, 133, 0.18);
+  color: #be123c;
+  border-color: rgba(251, 113, 133, 0.3);
+}
+
+.news-source-wsj {
+  background: rgba(30, 58, 138, 0.14);
+  color: #1e3a8a;
+  border-color: rgba(30, 58, 138, 0.3);
+}
+
+.news-source-other {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+.news-card-desc {
+  margin: 0.45rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
 .news-card-time {
   margin: 0.35rem 0 0;
   font-size: 0.72rem;

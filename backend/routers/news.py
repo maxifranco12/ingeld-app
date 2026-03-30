@@ -5,15 +5,20 @@ from __future__ import annotations
 import json
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
-import yfinance as yf
 from anthropic import Anthropic
+from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+import requests
+import yfinance as yf
 
 from routers.market import fundamentals_from_info
+
+load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
 
 router = APIRouter()
 
@@ -22,6 +27,8 @@ class NoticiaItem(BaseModel):
     titulo: str
     fecha: str
     url: str
+    fuente: str = ""
+    descripcion: str = ""
     impacto: str = Field(..., description="POSITIVO|NEGATIVO|NEUTRO")
     es_fundamental: bool
     analisis: str
@@ -42,38 +49,68 @@ def _extract_json(text: str) -> dict[str, Any]:
     return json.loads(t)
 
 
-def _news_raw_from_yf(ticker: str) -> list[dict[str, Any]]:
-    t = yf.Ticker(ticker)
-    raw = getattr(t, "news", None) or []
+def _news_from_newsapi(query: str, api_key: str) -> list[dict[str, Any]]:
+    url = "https://newsapi.org/v2/everything"
+    from_date = (datetime.now(timezone.utc) - timedelta(days=7)).date().isoformat()
+    base_params: dict[str, Any] = {
+        "q": query,
+        "language": "en",
+        "sortBy": "publishedAt",
+        "pageSize": 10,
+        "from": from_date,
+        "apiKey": api_key,
+    }
+    primary = dict(base_params)
+    primary["sources"] = (
+        "bloomberg,cnbc,financial-times,barrons,reuters,the-wall-street-journal"
+    )
+    fallback = dict(base_params)
+    fallback["domains"] = (
+        "bloomberg.com,cnbc.com,reuters.com,ft.com,barrons.com,wsj.com,marketwatch.com"
+    )
+
+    def _call(params: dict[str, Any]) -> list[dict[str, Any]]:
+        try:
+            res = requests.get(url, params=params, timeout=12)
+            res.raise_for_status()
+            j = res.json()
+            return j.get("articles") or []
+        except Exception:
+            return []
+
+    raw = _call(primary)
+    if not raw:
+        raw = _call(fallback)
+
     out: list[dict[str, Any]] = []
-    for n in raw[:25]:
+    for n in raw[:10]:
         if not isinstance(n, dict):
             continue
         title = str(n.get("title") or "").strip()
-        link = str(n.get("link") or n.get("url") or "").strip()
-        pub = str(n.get("publisher") or "").strip()
-        ts = n.get("providerPublishTime")
-        if ts is None and n.get("providerPublishTime") is None:
-            ts = n.get("pubDate")
-        fecha_iso = ""
-        if isinstance(ts, (int, float)):
-            try:
-                fecha_iso = datetime.fromtimestamp(
-                    float(ts), tz=timezone.utc
-                ).isoformat()
-            except (OSError, OverflowError, ValueError):
-                fecha_iso = ""
-        elif isinstance(ts, str):
-            fecha_iso = ts
+        link = str(n.get("url") or "").strip()
+        source = n.get("source") if isinstance(n.get("source"), dict) else {}
+        pub = str((source or {}).get("name") or "").strip()
+        fecha_iso = str(n.get("publishedAt") or "").strip()
+        desc = str(n.get("description") or "").strip()
         out.append(
             {
                 "titulo": title,
                 "fecha": fecha_iso,
                 "url": link,
                 "fuente": pub or "—",
+                "descripcion": desc,
             }
         )
-    return [x for x in out if x["titulo"]]
+    dedup: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in out:
+        k = (row.get("url") or "").strip().lower()
+        if not k or k in seen:
+            continue
+        seen.add(k)
+        if row.get("titulo"):
+            dedup.append(row)
+    return dedup
 
 
 @router.get("/{ticker:path}", response_model=NewsResponse)
@@ -85,13 +122,20 @@ def news_monitor(ticker: str) -> NewsResponse:
     yft = yf.Ticker(sym)
     info = yft.info or {}
     fundamentals = fundamentals_from_info(info)
-    raw_items = _news_raw_from_yf(sym)
+    news_key = (os.getenv("NEWS_API_KEY") or "").strip()
+    if not news_key:
+        raise HTTPException(status_code=503, detail="NEWS_API_KEY no configurada en .env")
+
+    search_query = str(info.get("shortName") or info.get("longName") or sym).strip() or sym
+    raw_items = _news_from_newsapi(search_query, news_key)
+    if not raw_items and search_query.upper() != sym.upper():
+        raw_items = _news_from_newsapi(sym, news_key)
 
     if not raw_items:
         return NewsResponse(
             noticias=[],
             resumen_macro=(
-                "No hay noticias recientes indexadas en Yahoo Finance para "
+                "No hay noticias recientes disponibles en fuentes confiables para "
                 f"este activo ({sym})."
             ),
             oportunidad=False,
@@ -108,12 +152,14 @@ def news_monitor(ticker: str) -> NewsResponse:
     bloque_noticias = json.dumps(raw_items, ensure_ascii=False, indent=2)[:12000]
     bloque_fund = json.dumps(fundamentals, ensure_ascii=False, indent=2)[:8000]
 
-    prompt = f"""Sos analista financiero senior. Activo: {sym}
+    prompt = f"""Sos analista financiero senior especializado en análisis fundamental.
+Evaluá cada noticia en contexto del negocio real de la empresa, no del ruido del precio de la acción.
+Activo: {sym}
 
 Fundamentals (JSON):
 {bloque_fund}
 
-Noticias recientes (JSON, de Yahoo Finance):
+Noticias recientes (JSON):
 {bloque_noticias}
 
 Tarea:
@@ -183,6 +229,8 @@ Incluí una entrada en "noticias" por cada ítem de entrada, en el mismo orden. 
                 titulo=r["titulo"],
                 fecha=r["fecha"],
                 url=r["url"],
+                fuente=str(r.get("fuente") or ""),
+                descripcion=str(r.get("descripcion") or ""),
                 impacto=_norm_imp(ai.get("impacto")),
                 es_fundamental=bool(ai.get("es_fundamental")),
                 analisis=str(ai.get("analisis") or "").strip(),
