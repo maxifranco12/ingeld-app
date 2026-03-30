@@ -13,7 +13,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom'
 import { useFavoritos } from '../hooks/useFavoritos'
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? ''
+const API = import.meta.env.VITE_API_URL ?? ''
 
 type ChartRange = '1M' | '3M' | '6M' | '1Y'
 
@@ -90,7 +90,7 @@ export function Activo() {
     setError(null)
     setData(null)
     try {
-      const path = `${BASE_URL}/api/market/asset/${encodeURIComponent(symbol)}?range=${encodeURIComponent(range)}`
+      const path = `${API}/api/market/asset/${encodeURIComponent(symbol)}?range=${encodeURIComponent(range)}`
       const res = await fetch(path)
       if (!res.ok) {
         const t = await res.text()

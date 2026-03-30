@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? ''
+const API = import.meta.env.VITE_API_URL ?? ''
 
 type TapeItem = {
   symbol: string
@@ -16,7 +16,7 @@ export function TickerTape() {
     let cancelled = false
     async function load() {
       try {
-        const res = await fetch(`${BASE_URL}/api/market/tape`)
+        const res = await fetch(`${API}/api/market/tape`)
         if (!res.ok) return
         const json = (await res.json()) as { items: TapeItem[] }
         if (!cancelled) setItems(json.items ?? [])

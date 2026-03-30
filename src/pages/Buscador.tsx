@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { PageBackButton } from '../components/PageBackButton'
 import { useFavoritos } from '../hooks/useFavoritos'
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? ''
+const API = import.meta.env.VITE_API_URL ?? ''
 
 type SearchHit = {
   symbol: string
@@ -82,7 +82,7 @@ export function Buscador() {
       ;(async () => {
         try {
           const res = await fetch(
-            `${BASE_URL}/api/market/search?q=${encodeURIComponent(v)}`,
+            `${API}/api/market/search?q=${encodeURIComponent(v)}`,
           )
           if (cancelled || !res.ok) return
           const data = (await res.json()) as SearchHit[]
@@ -114,7 +114,7 @@ export function Buscador() {
     setTabLoading(id)
     try {
       const qs = spec.syms.map(encodeURIComponent).join(',')
-      const res = await fetch(`${BASE_URL}/api/market/overview?symbols=${qs}`)
+      const res = await fetch(`${API}/api/market/overview?symbols=${qs}`)
       if (!res.ok) return
       const j = (await res.json()) as { items: OverviewRow[] }
       setTabRows((prev) => ({ ...prev, [id]: j.items ?? [] }))

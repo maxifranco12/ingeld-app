@@ -10,7 +10,7 @@ type ChatMessage = { role: ChatRole; content: string }
 const RESUMEN_INICIAL =
   'Hacé un resumen técnico completo de este activo en 3-4 párrafos'
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? ''
+const API = import.meta.env.VITE_API_URL ?? ''
 
 const PREGUNTAS_RAPIDAS = [
   '¿Cuál es la tendencia?',
@@ -24,7 +24,7 @@ async function postAnalizar(
   mensaje: string,
   historial: { role: string; content: string }[],
 ) {
-  const res = await fetch(`${BASE_URL}/api/chat/analizar`, {
+  const res = await fetch(`${API}/api/chat/analizar`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ticker, mensaje, historial }),

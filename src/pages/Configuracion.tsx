@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { PageBackButton } from '../components/PageBackButton'
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? ''
+const API = import.meta.env.VITE_API_URL ?? ''
 
 const LS_KEY = 'ingeld_scanner_tickers'
 
@@ -84,7 +84,7 @@ export function Configuracion() {
     }
     setSaving(true)
     try {
-      const res = await fetch(`${BASE_URL}/api/scanner/tickers`, {
+      const res = await fetch(`${API}/api/scanner/tickers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tickers }),

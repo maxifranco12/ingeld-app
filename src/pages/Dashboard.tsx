@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useFavoritos } from '../hooks/useFavoritos'
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? ''
+const API = import.meta.env.VITE_API_URL ?? ''
 
 type PulseItem = {
   label: string
@@ -113,10 +113,10 @@ export function Dashboard() {
       setError(null)
       try {
         const [pr, ov, sm, cd] = await Promise.all([
-          fetch(`${BASE_URL}/api/market/pulse`),
-          fetch(`${BASE_URL}/api/market/overview`),
-          fetch(`${BASE_URL}/api/market/ai-summary`),
-          fetch(`${BASE_URL}/api/market/candidates`),
+          fetch(`${API}/api/market/pulse`),
+          fetch(`${API}/api/market/overview`),
+          fetch(`${API}/api/market/ai-summary`),
+          fetch(`${API}/api/market/candidates`),
         ])
         if (!pr.ok || !ov.ok || !sm.ok || !cd.ok) {
           throw new Error('Uno o más endpoints fallaron')
@@ -155,7 +155,7 @@ export function Dashboard() {
     ;(async () => {
       try {
         const q = favoritos.map(encodeURIComponent).join(',')
-        const res = await fetch(`${BASE_URL}/api/market/overview?symbols=${q}`)
+        const res = await fetch(`${API}/api/market/overview?symbols=${q}`)
         if (!res.ok || cancelled) return
         const j = (await res.json()) as OverviewResponse
         if (!cancelled) setFavItems(j.items ?? [])
