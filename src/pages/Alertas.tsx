@@ -53,7 +53,8 @@ export function Alertas() {
     void load()
   }, [load])
 
-  const guardar = async () => {
+  const handleGuardar = async () => {
+    console.log('form alerta:', form)
     const t = form.ticker.trim().toUpperCase()
     const v = parseFloat(form.valor.replace(',', '.'))
     if (!t || !Number.isFinite(v)) return
@@ -190,17 +191,20 @@ export function Alertas() {
           aria-modal="true"
           aria-labelledby="al-modal-title"
         >
-          <div className="ingeld-modal">
+          <div
+            className="ingeld-modal"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
             <h2 id="al-modal-title" className="ingeld-modal-title">
               Nueva alerta
             </h2>
             <label className="ingeld-modal-field">
               Ticker
               <input
+                type="text"
+                className="ingeld-input"
                 value={form.ticker}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, ticker: e.target.value }))
-                }
+                onChange={e => setForm(f => ({ ...f, ticker: e.target.value }))}
                 placeholder="GGAL.BA"
               />
             </label>
@@ -208,9 +212,7 @@ export function Alertas() {
               Tipo
               <select
                 value={form.tipo}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, tipo: e.target.value }))
-                }
+                onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))}
               >
                 {TIPOS.map((t) => (
                   <option key={t.id} value={t.id}>
@@ -222,10 +224,10 @@ export function Alertas() {
             <label className="ingeld-modal-field">
               Valor numérico (precio, % o RSI según tipo)
               <input
+                type="text"
+                className="ingeld-input"
                 value={form.valor}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, valor: e.target.value }))
-                }
+                onChange={e => setForm(f => ({ ...f, valor: e.target.value }))}
                 inputMode="decimal"
               />
             </label>
@@ -233,7 +235,11 @@ export function Alertas() {
               <button type="button" onClick={() => setModal(false)}>
                 Cancelar
               </button>
-              <button type="button" className="ingeld-modal-primary" onClick={() => void guardar()}>
+              <button
+                type="button"
+                className="ingeld-modal-primary"
+                onClick={() => void handleGuardar()}
+              >
                 Guardar
               </button>
             </div>
