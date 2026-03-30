@@ -2026,6 +2026,29 @@ button {
   align-self: flex-start;
 }
 
+.activo-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.activo-export-btn {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.55rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent);
+  background: var(--bg-card);
+  color: var(--accent);
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.activo-export-btn:hover {
+  background: rgba(0, 168, 122, 0.08);
+}
+
 .activo-ia-btn:hover {
   filter: brightness(1.05);
 }

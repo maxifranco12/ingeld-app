@@ -11,6 +11,7 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts'
 import { useNavigate, useParams } from 'react-router-dom'
+import { exportActivoPdf } from '../lib/exportActivoPdf'
 import { useFavoritos } from '../hooks/useFavoritos'
 
 const API = import.meta.env.VITE_API_URL ?? ''
@@ -450,15 +451,43 @@ export function Activo() {
                 Volumen: {data.volume.toLocaleString('es-AR')}
               </p>
             </div>
-            <button
-              type="button"
-              className="activo-ia-btn"
-              onClick={() =>
-                navigate(`/analisis?ticker=${encodeURIComponent(data.symbol)}`)
-              }
-            >
-              Analizar con IA
-            </button>
+            <div className="activo-header-actions">
+              <button
+                type="button"
+                className="activo-export-btn"
+                onClick={() =>
+                  exportActivoPdf({
+                    symbol: data.symbol,
+                    companyName: data.info.nombre,
+                    exchange: data.info.exchange,
+                    currency: data.info.moneda,
+                    price: data.price,
+                    changePct: data.changePct,
+                    volume: data.volume,
+                    rsi14: data.rsi14,
+                    macd: data.macd,
+                    bollinger: data.bollinger,
+                    ma20: data.ma20,
+                    ma50: data.ma50,
+                    precioVsMa20: data.precio_vs_ma20,
+                    precioVsMa50: data.precio_vs_ma50,
+                    fundamentals: data.fundamentals ?? null,
+                    fundamentalIa: fundIa ?? null,
+                  })
+                }
+              >
+                Exportar PDF
+              </button>
+              <button
+                type="button"
+                className="activo-ia-btn"
+                onClick={() =>
+                  navigate(`/analisis?ticker=${encodeURIComponent(data.symbol)}`)
+                }
+              >
+                Analizar con IA
+              </button>
+            </div>
           </header>
 
           <div className="activo-chart-wrap">
