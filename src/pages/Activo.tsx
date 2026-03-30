@@ -182,6 +182,35 @@ function recoLabel(key: string | null | undefined): string {
   return map[k] ?? key
 }
 
+async function postAnalizar(ticker: string, mensaje: string) {
+  const res = await fetch(`${API}/api/chat/analizar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ticker, mensaje, historial: [] }),
+  })
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(t || `HTTP ${res.status}`)
+  }
+  const j = (await res.json()) as { respuesta: string }
+  return (j.respuesta ?? '').trim()
+}
+
+function parseNewsTranslationJson(text: string): Array<{ titulo: string; descripcion: string }> {
+  let t = text.trim()
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (fence) t = fence[1].trim()
+  const arr = JSON.parse(t) as unknown
+  if (!Array.isArray(arr)) throw new Error('Respuesta no es un array JSON')
+  return arr.map((row) => {
+    const o = row as Record<string, unknown>
+    return {
+      titulo: String(o.titulo ?? ''),
+      descripcion: String(o.descripcion ?? ''),
+    }
+  })
+}
+
 function sourceBadgeClass(source: string | undefined): string {
   const s = (source || '').toLowerCase()
   if (s.includes('bloomberg')) return 'news-source-bloomberg'
@@ -213,6 +242,16 @@ export function Activo() {
   const [newsData, setNewsData] = useState<NewsPayload | null>(null)
   const [newsLoading, setNewsLoading] = useState(false)
   const [newsErr, setNewsErr] = useState<string | null>(null)
+
+  const [aboutTextEs, setAboutTextEs] = useState<string | null>(null)
+  const [aboutShowEs, setAboutShowEs] = useState(false)
+  const [aboutTranslating, setAboutTranslating] = useState(false)
+
+  const [newsTranslatedPairs, setNewsTranslatedPairs] = useState<
+    Array<{ titulo: string; descripcion: string }> | null
+  >(null)
+  const [newsShowEs, setNewsShowEs] = useState(false)
+  const [newsTranslating, setNewsTranslating] = useState(false)
 
   const load = useCallback(async () => {
     if (!symbol) return
@@ -273,6 +312,80 @@ export function Activo() {
     setFundIa(null)
     setFundIaErr(null)
   }, [data?.symbol])
+
+  useEffect(() => {
+    setAboutTextEs(null)
+    setAboutShowEs(false)
+    setAboutTranslating(false)
+    setNewsTranslatedPairs(null)
+    setNewsShowEs(false)
+    setNewsTranslating(false)
+  }, [data?.symbol])
+
+  const handleAboutTranslateClick = () => {
+    if (!data) return
+    if (aboutShowEs) {
+      setAboutShowEs(false)
+      return
+    }
+    if (aboutTextEs) {
+      setAboutShowEs(true)
+      return
+    }
+    const raw = (
+      data?.fundamentals?.description ||
+      data.info.descripcion ||
+      ''
+    ).trim()
+    if (!raw) return
+    setAboutTranslating(true)
+    void (async () => {
+      try {
+        const msg = `Traducí este texto al español de forma natural, sin agregar nada: ${raw}`
+        const resp = await postAnalizar(data.symbol, msg)
+        setAboutTextEs(resp)
+        setAboutShowEs(true)
+      } catch {
+        /* noop; podríamos setear error local */
+      } finally {
+        setAboutTranslating(false)
+      }
+    })()
+  }
+
+  const handleNewsTranslateClick = () => {
+    if (!data || !newsData?.noticias?.length) return
+    if (newsShowEs) {
+      setNewsShowEs(false)
+      return
+    }
+    if (newsTranslatedPairs && newsTranslatedPairs.length === newsData.noticias.length) {
+      setNewsShowEs(true)
+      return
+    }
+    setNewsTranslating(true)
+    void (async () => {
+      try {
+        const lista = newsData.noticias.map((n) => ({
+          titulo: n.titulo,
+          descripcion: n.descripcion ?? '',
+        }))
+        const payload = JSON.stringify(lista)
+        const mensaje = `Traducí al español estos títulos y descripciones de noticias. Devolvé SOLO un JSON array con objetos {titulo, descripcion} en el mismo orden: ${payload}`
+        const resp = await postAnalizar(data.symbol, mensaje)
+        const parsed = parseNewsTranslationJson(resp)
+        if (parsed.length !== newsData.noticias.length) {
+          throw new Error('Cantidad de ítems no coincide')
+        }
+        setNewsTranslatedPairs(parsed)
+        setNewsShowEs(true)
+      } catch {
+        /* noop */
+      } finally {
+        setNewsTranslating(false)
+      }
+    })()
+  }
 
   const runFundamentalIa = async () => {
     if (!data?.fundamentals) return
@@ -379,6 +492,12 @@ export function Activo() {
   const pos = data ? data.changePct >= 0 : false
   const zone = rsiZone(data?.rsi14 ?? null)
   const f = data?.fundamentals
+
+  const aboutBaseText = (f?.description || data?.info.descripcion || '').trim()
+  const aboutDisplayText =
+    aboutShowEs && aboutTextEs
+      ? aboutTextEs
+      : (f?.description || data?.info.descripcion || '')
 
   const w52High = f?.['52w_high']
   const w52Low = f?.['52w_low']
@@ -777,7 +896,22 @@ export function Activo() {
                 )}
               </div>
 
-              <h3 className="activo-subsec-title">Sobre la empresa</h3>
+              <div className="activo-sec-title-row">
+                <h3 className="activo-subsec-title activo-subsec-title--row">Sobre la empresa</h3>
+                {aboutBaseText ? (
+                  <button
+                    type="button"
+                    className="activo-translate-btn"
+                    onClick={handleAboutTranslateClick}
+                    disabled={aboutTranslating}
+                  >
+                    {aboutTranslating ? (
+                      <span className="activo-translate-spinner" aria-hidden />
+                    ) : null}
+                    {aboutShowEs && aboutTextEs ? 'Ver en inglés' : 'Traducir al español'}
+                  </button>
+                ) : null}
+              </div>
               <div className="activo-about">
                 {f.sector ? (
                   <span className="activo-badge-sector">{f.sector}</span>
@@ -785,9 +919,9 @@ export function Activo() {
                 {f.industry ? (
                   <span className="activo-badge-industry">{f.industry}</span>
                 ) : null}
-                {(f.description || data.info.descripcion) ? (
+                {aboutBaseText ? (
                   <p className="activo-about-desc font-prose">
-                    {f.description || data.info.descripcion}
+                    {aboutDisplayText}
                   </p>
                 ) : (
                   <p className="activo-target-muted font-prose">Sin descripción disponible.</p>
@@ -845,9 +979,24 @@ export function Activo() {
           )}
 
           <section className="activo-noticias" aria-labelledby="news-h">
-            <h2 id="news-h" className="dash-zone-title">
-              Noticias
-            </h2>
+            <div className="activo-sec-title-row">
+              <h2 id="news-h" className="dash-zone-title activo-subsec-title--row">
+                Noticias
+              </h2>
+              {newsData?.noticias?.length ? (
+                <button
+                  type="button"
+                  className="activo-translate-btn"
+                  onClick={handleNewsTranslateClick}
+                  disabled={newsTranslating}
+                >
+                  {newsTranslating ? (
+                    <span className="activo-translate-spinner" aria-hidden />
+                  ) : null}
+                  {newsShowEs && newsTranslatedPairs ? 'Ver en inglés' : 'Traducir noticias'}
+                </button>
+              ) : null}
+            </div>
             {newsLoading && (
               <p className="page-sub font-prose">Analizando noticias con IA…</p>
             )}
@@ -865,46 +1014,54 @@ export function Activo() {
             )}
             {newsData?.noticias?.length ? (
               <div className="news-cards-grid">
-                {newsData.noticias.map((n) => (
-                  <article key={n.url + n.titulo} className="news-card">
-                    <div className="news-card-badges">
-                      <span
-                        className={
-                          n.impacto === 'POSITIVO'
-                            ? 'news-badge-positivo'
-                            : n.impacto === 'NEGATIVO'
-                              ? 'news-badge-negativo'
-                              : 'news-badge-neutro'
-                        }
+                {newsData.noticias.map((n, idx) => {
+                  const pair =
+                    newsShowEs && newsTranslatedPairs
+                      ? newsTranslatedPairs[idx]
+                      : undefined
+                  const titulo = pair?.titulo ?? n.titulo
+                  const desc = pair?.descripcion ?? (n.descripcion ?? '')
+                  return (
+                    <article key={`${n.url}-${idx}`} className="news-card">
+                      <div className="news-card-badges">
+                        <span
+                          className={
+                            n.impacto === 'POSITIVO'
+                              ? 'news-badge-positivo'
+                              : n.impacto === 'NEGATIVO'
+                                ? 'news-badge-negativo'
+                                : 'news-badge-neutro'
+                          }
+                        >
+                          {n.impacto}
+                        </span>
+                        {!n.es_fundamental && n.impacto === 'POSITIVO' ? (
+                          <span className="news-badge-oportunidad">⚡ OPORTUNIDAD</span>
+                        ) : null}
+                      </div>
+                      <a
+                        href={n.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="news-card-title"
                       >
-                        {n.impacto}
-                      </span>
-                      {!n.es_fundamental && n.impacto === 'POSITIVO' ? (
-                        <span className="news-badge-oportunidad">⚡ OPORTUNIDAD</span>
+                        {titulo}
+                      </a>
+                      <div className="news-source-row">
+                        <span className={`news-source-badge ${sourceBadgeClass(n.fuente)}`}>
+                          {n.fuente || 'Fuente'}
+                        </span>
+                      </div>
+                      {desc ? (
+                        <p className="news-card-desc font-prose">{desc}</p>
                       ) : null}
-                    </div>
-                    <a
-                      href={n.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="news-card-title"
-                    >
-                      {n.titulo}
-                    </a>
-                    <div className="news-source-row">
-                      <span className={`news-source-badge ${sourceBadgeClass(n.fuente)}`}>
-                        {n.fuente || 'Fuente'}
-                      </span>
-                    </div>
-                    {n.descripcion ? (
-                      <p className="news-card-desc font-prose">{n.descripcion}</p>
-                    ) : null}
-                    <p className="news-card-time">{relTimeEs(n.fecha)}</p>
-                    {n.analisis ? (
-                      <p className="news-card-ai font-prose">{n.analisis}</p>
-                    ) : null}
-                  </article>
-                ))}
+                      <p className="news-card-time">{relTimeEs(n.fecha)}</p>
+                      {n.analisis ? (
+                        <p className="news-card-ai font-prose">{n.analisis}</p>
+                      ) : null}
+                    </article>
+                  )
+                })}
               </div>
             ) : null}
             {!newsLoading && newsData && !newsData.noticias?.length && !newsErr ? (

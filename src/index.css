@@ -2185,6 +2185,60 @@ button {
   color: var(--text-muted);
 }
 
+.activo-sec-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  margin: 1.35rem 0 0.6rem;
+}
+
+.activo-sec-title-row .dash-zone-title {
+  margin-bottom: 0;
+}
+
+.activo-subsec-title--row {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.activo-translate-btn {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.activo-translate-btn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: rgba(0, 168, 122, 0.35);
+}
+
+.activo-translate-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.activo-translate-spinner {
+  width: 0.85rem;
+  height: 0.85rem;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: scanner-spin 0.75s linear infinite;
+}
+
 .fundamental-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));

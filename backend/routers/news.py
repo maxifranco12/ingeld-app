@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,7 @@ import yfinance as yf
 from routers.market import fundamentals_from_info
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
+NEWS_API_KEY = os.getenv("NEWS_API_KEY", "42dd9470a9dc46ed97c814b106ccd257")
 
 router = APIRouter()
 
@@ -49,33 +51,37 @@ def _extract_json(text: str) -> dict[str, Any]:
     return json.loads(t)
 
 
-def _news_from_newsapi(query: str, api_key: str) -> list[dict[str, Any]]:
+def _news_from_newsapi(company_name: str, ticker: str, api_key: str) -> list[dict[str, Any]]:
     url = "https://newsapi.org/v2/everything"
-    from_date = (datetime.now(timezone.utc) - timedelta(days=7)).date().isoformat()
-    base_params: dict[str, Any] = {
-        "q": query,
+    from_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    q1 = f"{company_name} OR {ticker}".strip()
+    primary: dict[str, Any] = {
+        "q": q1,
         "language": "en",
         "sortBy": "publishedAt",
-        "pageSize": 10,
+        "pageSize": 15,
         "from": from_date,
         "apiKey": api_key,
     }
-    primary = dict(base_params)
-    primary["sources"] = (
-        "bloomberg,cnbc,financial-times,barrons,reuters,the-wall-street-journal"
-    )
-    fallback = dict(base_params)
-    fallback["domains"] = (
-        "bloomberg.com,cnbc.com,reuters.com,ft.com,barrons.com,wsj.com,marketwatch.com"
-    )
+    fallback: dict[str, Any] = {
+        "q": ticker,
+        "language": "en",
+        "sortBy": "relevancy",
+        "pageSize": 10,
+        "apiKey": api_key,
+    }
 
     def _call(params: dict[str, Any]) -> list[dict[str, Any]]:
         try:
+            print(f"NewsAPI búsqueda: {params.get('q', '')}", file=sys.stderr)
             res = requests.get(url, params=params, timeout=12)
             res.raise_for_status()
             j = res.json()
-            return j.get("articles") or []
+            articles = j.get("articles") or []
+            print(f"NewsAPI resultado: {len(articles)} artículos", file=sys.stderr)
+            return articles
         except Exception:
+            print("NewsAPI resultado: 0 artículos", file=sys.stderr)
             return []
 
     raw = _call(primary)
@@ -122,14 +128,12 @@ def news_monitor(ticker: str) -> NewsResponse:
     yft = yf.Ticker(sym)
     info = yft.info or {}
     fundamentals = fundamentals_from_info(info)
-    news_key = (os.getenv("NEWS_API_KEY") or "").strip()
+    news_key = (NEWS_API_KEY or "").strip()
     if not news_key:
         raise HTTPException(status_code=503, detail="NEWS_API_KEY no configurada en .env")
 
-    search_query = str(info.get("shortName") or info.get("longName") or sym).strip() or sym
-    raw_items = _news_from_newsapi(search_query, news_key)
-    if not raw_items and search_query.upper() != sym.upper():
-        raw_items = _news_from_newsapi(sym, news_key)
+    company_name = str(info.get("shortName") or info.get("longName") or sym).strip() or sym
+    raw_items = _news_from_newsapi(company_name, sym, news_key)
 
     if not raw_items:
         return NewsResponse(
