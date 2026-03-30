@@ -2275,12 +2275,122 @@ button {
 
 .portfolio-ai-panel {
   margin-top: 1rem;
-  padding: 1rem;
+  padding: 1rem 1.1rem 1.15rem;
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: #faf9f7;
-  white-space: pre-wrap;
   line-height: 1.55;
+}
+
+.portfolio-ai-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.portfolio-ai-brand {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+
+.portfolio-ai-panel-sub {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.portfolio-ai-panel-divider {
+  height: 1px;
+  margin: 0.65rem 0 0.75rem;
+  background: var(--border);
+}
+
+.portfolio-ai-export-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.portfolio-ai-md {
+  font-family: var(--font-prose, ui-serif, Georgia, serif);
+  font-size: 0.92rem;
+  color: var(--text-body);
+}
+
+.portfolio-ai-h2 {
+  margin: 1.1rem 0 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent);
+  padding-bottom: 0.35rem;
+  border-bottom: 2px solid var(--accent);
+}
+
+.portfolio-ai-h2:first-child {
+  margin-top: 0;
+}
+
+.portfolio-ai-h3 {
+  margin: 0.85rem 0 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-heading);
+}
+
+.portfolio-ai-p {
+  margin: 0.35rem 0;
+  line-height: 1.6;
+}
+
+.portfolio-ai-li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin: 0.25rem 0;
+  padding-left: 0.15rem;
+  line-height: 1.55;
+}
+
+.portfolio-ai-bullet {
+  flex-shrink: 0;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-top: 0.45em;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px rgba(0, 168, 122, 0.25);
+}
+
+.portfolio-ai-li-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.portfolio-ai-hr {
+  border: none;
+  height: 1px;
+  margin: 0.85rem 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--border) 12%,
+    var(--border) 88%,
+    transparent
+  );
+}
+
+.portfolio-ai-spacer {
+  height: 0.5rem;
 }
 
 /* Alertas */
@@ -2454,6 +2564,12 @@ button {
 .ingeld-modal-title {
   margin: 0 0 1rem;
   font-size: 1.1rem;
+}
+
+.ingeld-modal-error {
+  margin: 0 0 0.75rem;
+  font-size: 0.82rem;
+  color: var(--loss);
 }
 
 .ingeld-modal-field {

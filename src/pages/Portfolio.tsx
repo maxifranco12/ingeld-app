@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import { exportPortfolioPdf } from '../lib/exportAnalisisPdf'
+import { exportPortfolioExcel } from '../lib/exportPortfolioExcel'
+import { AnalysisMarkdown } from '../lib/renderAnalysisMarkdown'
+
 const API = import.meta.env.VITE_API_URL ?? ''
 const LS_KEY = 'ingeld_portfolio'
 
@@ -19,6 +23,14 @@ type QuoteRow = {
   price: number
   changePct: number
   currency: string
+}
+
+/** Campos del modal "Nueva posición" (strings en inputs controlados). */
+type PortfolioFormState = {
+  ticker: string
+  cantidad: string
+  precioCompra: string
+  moneda: Moneda
 }
 
 function loadPositions(): Position[] {
@@ -55,15 +67,16 @@ export function Portfolio() {
   const [quotes, setQuotes] = useState<Record<string, QuoteRow>>({})
   const [loading, setLoading] = useState(false)
   const [modal, setModal] = useState(false)
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<PortfolioFormState>({
     ticker: '',
     cantidad: '',
     precioCompra: '',
-    moneda: 'ARS' as Moneda,
+    moneda: 'ARS',
   })
   const [aiLoading, setAiLoading] = useState(false)
   const [aiText, setAiText] = useState<string | null>(null)
   const [aiErr, setAiErr] = useState<string | null>(null)
+  const [modalFormErr, setModalFormErr] = useState<string | null>(null)
 
   const tickers = useMemo(
     () => [...new Set(positions.map((p) => p.ticker.trim().toUpperCase()))],
@@ -125,6 +138,22 @@ export function Portfolio() {
     })
   }, [positions, quotes])
 
+  const fechaAnalisisLabel = useMemo(
+    () =>
+      new Date().toLocaleDateString('es-AR', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      }),
+    [],
+  )
+
+  const fileDateSlug = useMemo(
+    () => new Date().toISOString().slice(0, 10),
+    [],
+  )
+
   const summary = useMemo(() => {
     let invUSD = 0
     let invARS = 0
@@ -164,23 +193,39 @@ export function Portfolio() {
     }
   }, [rows])
 
-  const addPosition = () => {
-    const t = form.ticker.trim().toUpperCase()
-    const c = parseFloat(form.cantidad.replace(',', '.'))
-    const pc = parseFloat(form.precioCompra.replace(',', '.'))
-    if (!t || !Number.isFinite(c) || c <= 0 || !Number.isFinite(pc) || pc <= 0)
+  const handleGuardarPosicion = () => {
+    console.log('form state:', form)
+    setModalFormErr(null)
+    const { ticker, cantidad, precioCompra, moneda } = form
+    const cantidadNum = parseFloat(cantidad)
+    const precioNum = parseFloat(precioCompra)
+
+    if (
+      !ticker.trim() ||
+      isNaN(cantidadNum) ||
+      cantidadNum <= 0 ||
+      isNaN(precioNum) ||
+      precioNum <= 0
+    ) {
+      setModalFormErr('Completá ticker, cantidad y precio (números > 0)')
       return
-    setPositions((prev) => [
-      ...prev,
-      {
-        id: uid(),
-        ticker: t,
-        cantidad: c,
-        precioCompra: pc,
-        moneda: form.moneda,
-      },
-    ])
-    setForm({ ticker: '', cantidad: '', precioCompra: '', moneda: form.moneda })
+    }
+    const t = ticker.trim().toUpperCase()
+    const nuevaPosicion: Position = {
+      id: uid(),
+      ticker: t,
+      cantidad: cantidadNum,
+      precioCompra: precioNum,
+      moneda,
+    }
+    console.log('guardando posicion', nuevaPosicion)
+    setPositions((prev) => {
+      const next = [...prev, nuevaPosicion]
+      savePositions(next)
+      return next
+    })
+    setForm({ ticker: '', cantidad: '', precioCompra: '', moneda })
+    setModalFormErr(null)
     setModal(false)
   }
 
@@ -220,6 +265,105 @@ export function Portfolio() {
     } finally {
       setAiLoading(false)
     }
+  }
+
+  const handleExportPdf = () => {
+    if (!aiText) return
+    exportPortfolioPdf({
+      rows: rows.map((r) => ({
+        sym: r.sym,
+        cantidad: r.pos.cantidad,
+        precioCompra: r.pos.precioCompra,
+        precioActual: r.hasQuote ? r.price : null,
+        pl: r.hasQuote ? r.pl : null,
+        plPct: r.hasQuote ? r.plPct : null,
+        moneda: r.pos.moneda,
+        hasQuote: r.hasQuote,
+      })),
+      summary: {
+        invARS: summary.invARS,
+        invUSD: summary.invUSD,
+        curARS: summary.curARS,
+        curUSD: summary.curUSD,
+        plARS: summary.plARS,
+        plUSD: summary.plUSD,
+      },
+      aiMarkdown: aiText,
+    })
+  }
+
+  const handleExportExcel = () => {
+    if (!aiText) return
+    exportPortfolioExcel({
+      fileDateSlug,
+      rows: rows.map((r) => ({
+        ticker: r.sym,
+        nombre: r.hasQuote ? r.name : '—',
+        cantidad: r.pos.cantidad,
+        precioCompra: r.pos.precioCompra,
+        precioActual: r.hasQuote
+          ? r.price.toLocaleString('es-AR', { maximumFractionDigits: 4 })
+          : '—',
+        pl: r.hasQuote
+          ? `${r.pl >= 0 ? '+' : ''}${r.pl.toLocaleString('es-AR', {
+              maximumFractionDigits: 2,
+            })} ${r.pos.moneda}`
+          : '—',
+        plPct: r.hasQuote
+          ? `${r.plPct >= 0 ? '+' : ''}${r.plPct.toFixed(2)}%`
+          : '—',
+        valorTotal: r.hasQuote
+          ? r.cur.toLocaleString('es-AR', { maximumFractionDigits: 2 })
+          : '—',
+        moneda: r.pos.moneda,
+      })),
+      summary: {
+        totalInvertidoARS:
+          summary.invARS > 0
+            ? `${summary.invARS.toLocaleString('es-AR', {
+                maximumFractionDigits: 0,
+              })} ARS`
+            : '—',
+        totalInvertidoUSD:
+          summary.invUSD > 0
+            ? `${summary.invUSD.toLocaleString('es-AR', {
+                maximumFractionDigits: 2,
+              })} USD`
+            : '—',
+        valorActualARS:
+          summary.curARS > 0
+            ? `${summary.curARS.toLocaleString('es-AR', {
+                maximumFractionDigits: 0,
+              })} ARS`
+            : '—',
+        valorActualUSD:
+          summary.curUSD > 0
+            ? `${summary.curUSD.toLocaleString('es-AR', {
+                maximumFractionDigits: 2,
+              })} USD`
+            : '—',
+        plARS:
+          summary.invARS > 0
+            ? `${summary.plARS >= 0 ? '+' : ''}${summary.plARS.toLocaleString(
+                'es-AR',
+                { maximumFractionDigits: 0 },
+              )} ARS`
+            : '—',
+        plUSD:
+          summary.invUSD > 0
+            ? `${summary.plUSD >= 0 ? '+' : ''}${summary.plUSD.toLocaleString(
+                'es-AR',
+                { maximumFractionDigits: 2 },
+              )} USD`
+            : '—',
+        mejorPosicion: summary.best
+          ? `${summary.best.sym} (${summary.best.pct >= 0 ? '+' : ''}${summary.best.pct.toFixed(2)}%)`
+          : '—',
+        peorPosicion: summary.worst
+          ? `${summary.worst.sym} (${summary.worst.pct.toFixed(2)}%)`
+          : '—',
+      },
+    })
   }
 
   return (
@@ -452,8 +596,31 @@ export function Portfolio() {
         </button>
         {aiErr && <div className="error-state">{aiErr}</div>}
         {aiText && (
-          <div className="portfolio-ai-panel font-prose">
-            {aiText}
+          <div className="portfolio-ai-panel">
+            <header className="portfolio-ai-panel-head">
+              <span className="portfolio-ai-brand">INGELD</span>
+              <span className="portfolio-ai-panel-sub">
+                Análisis de cartera — {fechaAnalisisLabel}
+              </span>
+            </header>
+            <div className="portfolio-ai-panel-divider" aria-hidden />
+            <div className="portfolio-ai-export-row">
+              <button
+                type="button"
+                className="portfolio-ai-btn"
+                onClick={handleExportPdf}
+              >
+                Exportar PDF
+              </button>
+              <button
+                type="button"
+                className="portfolio-refresh-btn"
+                onClick={handleExportExcel}
+              >
+                Exportar Excel
+              </button>
+            </div>
+            <AnalysisMarkdown source={aiText} />
           </div>
         )}
       </section>
@@ -465,38 +632,41 @@ export function Portfolio() {
           aria-modal="true"
           aria-labelledby="pf-modal-title"
         >
-          <div className="ingeld-modal">
+          <div
+            className="ingeld-modal"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
             <h2 id="pf-modal-title" className="ingeld-modal-title">
               Nueva posición
             </h2>
             <label className="ingeld-modal-field">
               Ticker
               <input
+                type="text"
+                className="ingeld-input"
+                placeholder="ej: GGAL.BA"
                 value={form.ticker}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, ticker: e.target.value }))
-                }
-                placeholder="GGAL.BA"
+                onChange={e => setForm(f => ({ ...f, ticker: e.target.value }))}
               />
             </label>
             <label className="ingeld-modal-field">
               Cantidad
               <input
+                type="number"
+                className="ingeld-input"
+                placeholder="ej: 100"
                 value={form.cantidad}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, cantidad: e.target.value }))
-                }
-                inputMode="decimal"
+                onChange={e => setForm(f => ({ ...f, cantidad: e.target.value }))}
               />
             </label>
             <label className="ingeld-modal-field">
               Precio de compra
               <input
+                type="number"
+                className="ingeld-input"
+                placeholder="ej: 6000"
                 value={form.precioCompra}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, precioCompra: e.target.value }))
-                }
-                inputMode="decimal"
+                onChange={e => setForm(f => ({ ...f, precioCompra: e.target.value }))}
               />
             </label>
             <label className="ingeld-modal-field">
@@ -514,11 +684,30 @@ export function Portfolio() {
                 <option value="USD">USD</option>
               </select>
             </label>
+            {modalFormErr && (
+              <p className="ingeld-modal-error" role="alert">
+                {modalFormErr}
+              </p>
+            )}
             <div className="ingeld-modal-actions">
-              <button type="button" onClick={() => setModal(false)}>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalFormErr(null)
+                  setModal(false)
+                }}
+              >
                 Cancelar
               </button>
-              <button type="button" className="ingeld-modal-primary" onClick={addPosition}>
+              <button
+                type="button"
+                className="ingeld-modal-primary"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  handleGuardarPosicion()
+                }}
+              >
                 Guardar
               </button>
             </div>
