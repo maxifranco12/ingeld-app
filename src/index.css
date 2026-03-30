@@ -2395,7 +2395,7 @@ button {
 
 /* Alertas */
 .alertas-page {
-  max-width: 900px;
+  max-width: 1024px;
   margin: 0 auto;
 }
 
@@ -2430,6 +2430,175 @@ button {
 
 .alertas-check-btn:disabled {
   opacity: 0.5;
+}
+
+.alertas-empty {
+  margin-top: 0.5rem;
+  padding: 1.35rem 1.25rem;
+  border-radius: var(--radius);
+  border: 1px dashed var(--border);
+  background: var(--bg-card);
+  text-align: center;
+}
+
+.alertas-empty-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.alertas-empty-text {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 28rem;
+  margin-inline: auto;
+}
+
+.alertas-cards-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+}
+
+@media (min-width: 640px) {
+  .alertas-cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 960px) {
+  .alertas-cards-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.alerta-card {
+  position: relative;
+  padding: 1rem 1rem 0.9rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  box-shadow: var(--shadow);
+}
+
+.alerta-card-top {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding-right: 1.75rem;
+  margin-bottom: 0.45rem;
+}
+
+.alerta-card-icon {
+  flex-shrink: 0;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.alerta-card-icon--gain {
+  color: var(--gain);
+}
+
+.alerta-card-icon--loss {
+  color: var(--loss);
+}
+
+.alerta-card-icon--rsi-high {
+  color: #ca8a04;
+  filter: drop-shadow(0 0 0 rgba(202, 138, 4, 0.35));
+}
+
+.alerta-card-icon--rsi-low {
+  color: #2563eb;
+}
+
+.alerta-card-ticker {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+}
+
+.alerta-card-desc {
+  margin: 0 0 0.65rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--text-body);
+}
+
+.alerta-card-remove {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  width: 1.65rem;
+  height: 1.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text-muted);
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.alerta-card-remove:hover {
+  background: rgba(192, 41, 62, 0.12);
+  color: var(--loss);
+}
+
+.ingeld-modal--alerta {
+  max-width: 420px;
+}
+
+.alerta-preview-hint {
+  margin: -0.35rem 0 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.alerta-preview-box {
+  margin: -0.15rem 0 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: rgba(0, 168, 122, 0.05);
+}
+
+.alerta-preview-price {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-heading);
+}
+
+.alerta-preview-moneda {
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.alerta-preview-chg {
+  margin: 0.2rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.alerta-preview-name {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--text-muted);
 }
 
 .alertas-table-wrap {

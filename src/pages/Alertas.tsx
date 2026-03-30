@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type FocusEvent } from 'react'
 
 const API = import.meta.env.VITE_API_URL ?? ''
 
@@ -19,8 +19,99 @@ const TIPOS: { id: string; label: string }[] = [
   { id: 'rsi_bajo', label: 'RSI < umbral' },
 ]
 
+type AssetPreview = {
+  price: number
+  changePct: number
+  moneda: string
+  nombre: string
+}
+
 function tipoLabel(t: string) {
   return TIPOS.find((x) => x.id === t)?.label ?? t
+}
+
+function fmtNum(n: number, maxFrac = 4) {
+  return n.toLocaleString('es-AR', { maximumFractionDigits: maxFrac })
+}
+
+/** Texto claro para cards y banner (sin jerga técnica del tipo). */
+function descripcionAlerta(a: Alerta): string {
+  const t = a.ticker.toUpperCase()
+  const v = a.valor
+  switch (a.tipo) {
+    case 'precio_sube':
+      return `${t} llega o supera ${fmtNum(v, 4)}`
+    case 'precio_baja':
+      return `${t} baja o llega a ${fmtNum(v, 4)} o menos`
+    case 'sube_pct':
+      return `${t} sube más de ${fmtNum(v, 2)}% en el día`
+    case 'baja_pct':
+      return `${t} baja más de ${fmtNum(v, 2)}% en el día`
+    case 'rsi_alto':
+      return `RSI de ${t} supera ${fmtNum(v, 1)}`
+    case 'rsi_bajo':
+      return `RSI de ${t} cae por debajo de ${fmtNum(v, 1)}`
+    default:
+      return `${t} · ${tipoLabel(a.tipo)} · ${v}`
+  }
+}
+
+function iconForTipo(tipo: string): string {
+  switch (tipo) {
+    case 'precio_sube':
+      return '↑'
+    case 'precio_baja':
+      return '↓'
+    case 'sube_pct':
+      return '📈'
+    case 'baja_pct':
+      return '📉'
+    case 'rsi_alto':
+    case 'rsi_bajo':
+      return '⚡'
+    default:
+      return '•'
+  }
+}
+
+function iconClassForTipo(tipo: string): string {
+  switch (tipo) {
+    case 'precio_sube':
+    case 'sube_pct':
+      return 'alerta-card-icon--gain'
+    case 'precio_baja':
+    case 'baja_pct':
+      return 'alerta-card-icon--loss'
+    case 'rsi_alto':
+      return 'alerta-card-icon--rsi-high'
+    case 'rsi_bajo':
+      return 'alerta-card-icon--rsi-low'
+    default:
+      return ''
+  }
+}
+
+function valorFieldLabel(tipo: string, preview: AssetPreview | null): string {
+  const mon = preview?.moneda?.trim() || 'ARS'
+  const actual =
+    preview != null
+      ? `${fmtNum(preview.price, 4)} ${mon}`
+      : null
+  switch (tipo) {
+    case 'precio_sube':
+    case 'precio_baja':
+      return actual
+        ? `¿A qué precio? (actual: ${actual})`
+        : '¿A qué precio?'
+    case 'sube_pct':
+    case 'baja_pct':
+      return '¿Qué % del día? (ej: 5)'
+    case 'rsi_alto':
+    case 'rsi_bajo':
+      return '¿Valor de RSI? (ej: 70)'
+    default:
+      return 'Valor'
+  }
 }
 
 export function Alertas() {
@@ -34,6 +125,8 @@ export function Alertas() {
   })
   const [checkLoading, setCheckLoading] = useState(false)
   const [banner, setBanner] = useState<Alerta[]>([])
+  const [tickerPreview, setTickerPreview] = useState<AssetPreview | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -53,6 +146,50 @@ export function Alertas() {
     void load()
   }, [load])
 
+  useEffect(() => {
+    if (!modal) {
+      setTickerPreview(null)
+      setPreviewLoading(false)
+    }
+  }, [modal])
+
+  const fetchTickerPreview = useCallback(async (tickerRaw: string) => {
+    const raw = tickerRaw.trim().toUpperCase()
+    if (raw.length < 2) {
+      setTickerPreview(null)
+      return
+    }
+    setPreviewLoading(true)
+    try {
+      const res = await fetch(
+        `${API}/api/market/asset/${encodeURIComponent(raw)}?range=${encodeURIComponent('1M')}`,
+      )
+      if (!res.ok) {
+        setTickerPreview(null)
+        return
+      }
+      const j = (await res.json()) as {
+        price: number
+        changePct: number
+        info?: { moneda?: string; nombre?: string }
+      }
+      setTickerPreview({
+        price: j.price,
+        changePct: j.changePct,
+        moneda: (j.info?.moneda || 'ARS').trim() || 'ARS',
+        nombre: (j.info?.nombre || raw).trim() || raw,
+      })
+    } catch {
+      setTickerPreview(null)
+    } finally {
+      setPreviewLoading(false)
+    }
+  }, [])
+
+  const handleTickerBlur = (e: FocusEvent<HTMLInputElement>) => {
+    void fetchTickerPreview(e.currentTarget.value)
+  }
+
   const handleGuardar = async () => {
     console.log('form alerta:', form)
     const t = form.ticker.trim().toUpperCase()
@@ -66,6 +203,7 @@ export function Alertas() {
     if (!res.ok) return
     setModal(false)
     setForm({ ticker: '', tipo: 'precio_sube', valor: '' })
+    setTickerPreview(null)
     void load()
   }
 
@@ -94,12 +232,20 @@ export function Alertas() {
     }
   }
 
+  const openModal = () => {
+    setForm({ ticker: '', tipo: 'precio_sube', valor: '' })
+    setTickerPreview(null)
+    setModal(true)
+  }
+
+  const valorLabel = valorFieldLabel(form.tipo, tickerPreview)
+
   return (
     <div className="alertas-page">
       {banner.length > 0 && (
         <div className="alerta-banner" role="alert">
           <strong>Alertas disparadas:</strong>{' '}
-          {banner.map((a) => `${a.ticker} (${tipoLabel(a.tipo)})`).join(' · ')}
+          {banner.map((a) => descripcionAlerta(a)).join(' · ')}
           <button
             type="button"
             className="alerta-banner-close"
@@ -121,7 +267,7 @@ export function Alertas() {
         <button
           type="button"
           className="alertas-new-btn"
-          onClick={() => setModal(true)}
+          onClick={openModal}
         >
           Nueva alerta
         </button>
@@ -138,49 +284,46 @@ export function Alertas() {
       {loading ? (
         <p className="page-sub font-prose">Cargando…</p>
       ) : alerts.length === 0 ? (
-        <p className="page-sub font-prose">No hay alertas configuradas.</p>
+        <div className="alertas-empty" role="status">
+          <p className="alertas-empty-title">No tenés alertas configuradas.</p>
+          <p className="alertas-empty-text">
+            Creá una para que INGELD te avise cuando un activo llegue a tu precio
+            objetivo.
+          </p>
+        </div>
       ) : (
-        <div className="alertas-table-wrap">
-          <table className="alertas-table">
-            <thead>
-              <tr>
-                <th>Ticker</th>
-                <th>Tipo</th>
-                <th>Valor</th>
-                <th>Estado</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {alerts.map((a) => (
-                <tr key={a.id}>
-                  <td className="alerta-tick">{a.ticker}</td>
-                  <td>{tipoLabel(a.tipo)}</td>
-                  <td>{a.valor}</td>
-                  <td>
-                    <span
-                      className={
-                        a.estado === 'disparada'
-                          ? 'alerta-badge-disparada'
-                          : 'alerta-badge-activa'
-                      }
-                    >
-                      {a.estado === 'disparada' ? 'DISPARADA' : 'ACTIVA'}
-                    </span>
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className="alerta-del"
-                      onClick={() => void eliminar(a.id)}
-                    >
-                      Eliminar
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="alertas-cards-grid">
+          {alerts.map((a) => (
+            <article key={a.id} className="alerta-card">
+              <button
+                type="button"
+                className="alerta-card-remove"
+                onClick={() => void eliminar(a.id)}
+                aria-label={`Eliminar alerta ${a.ticker}`}
+              >
+                ×
+              </button>
+              <div className="alerta-card-top">
+                <span
+                  className={`alerta-card-icon ${iconClassForTipo(a.tipo)}`}
+                  aria-hidden
+                >
+                  {iconForTipo(a.tipo)}
+                </span>
+                <h3 className="alerta-card-ticker">{a.ticker.toUpperCase()}</h3>
+              </div>
+              <p className="alerta-card-desc font-prose">{descripcionAlerta(a)}</p>
+              <span
+                className={
+                  a.estado === 'disparada'
+                    ? 'alerta-badge-disparada'
+                    : 'alerta-badge-activa'
+                }
+              >
+                {a.estado === 'disparada' ? 'DISPARADA' : 'ACTIVA'}
+              </span>
+            </article>
+          ))}
         </div>
       )}
 
@@ -192,7 +335,7 @@ export function Alertas() {
           aria-labelledby="al-modal-title"
         >
           <div
-            className="ingeld-modal"
+            className="ingeld-modal ingeld-modal--alerta"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <h2 id="al-modal-title" className="ingeld-modal-title">
@@ -204,15 +347,43 @@ export function Alertas() {
                 type="text"
                 className="ingeld-input"
                 value={form.ticker}
-                onChange={e => setForm(f => ({ ...f, ticker: e.target.value }))}
+                onChange={(e) => {
+                  setTickerPreview(null)
+                  setForm((f) => ({ ...f, ticker: e.target.value }))
+                }}
+                onBlur={handleTickerBlur}
                 placeholder="GGAL.BA"
               />
             </label>
+            {previewLoading && (
+              <p className="alerta-preview-hint">Cargando cotización…</p>
+            )}
+            {!previewLoading && tickerPreview && (
+              <div className="alerta-preview-box">
+                <p className="alerta-preview-price">
+                  {fmtNum(tickerPreview.price, 4)}{' '}
+                  <span className="alerta-preview-moneda">
+                    {tickerPreview.moneda}
+                  </span>
+                </p>
+                <p
+                  className={
+                    tickerPreview.changePct >= 0
+                      ? 'alerta-preview-chg gain'
+                      : 'alerta-preview-chg loss'
+                  }
+                >
+                  {tickerPreview.changePct >= 0 ? '+' : ''}
+                  {tickerPreview.changePct.toFixed(2)}% hoy
+                </p>
+                <p className="alerta-preview-name">{tickerPreview.nombre}</p>
+              </div>
+            )}
             <label className="ingeld-modal-field">
               Tipo
               <select
                 value={form.tipo}
-                onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))}
+                onChange={(e) => setForm((f) => ({ ...f, tipo: e.target.value }))}
               >
                 {TIPOS.map((t) => (
                   <option key={t.id} value={t.id}>
@@ -222,12 +393,12 @@ export function Alertas() {
               </select>
             </label>
             <label className="ingeld-modal-field">
-              Valor numérico (precio, % o RSI según tipo)
+              {valorLabel}
               <input
                 type="text"
                 className="ingeld-input"
                 value={form.valor}
-                onChange={e => setForm(f => ({ ...f, valor: e.target.value }))}
+                onChange={(e) => setForm((f) => ({ ...f, valor: e.target.value }))}
                 inputMode="decimal"
               />
             </label>
