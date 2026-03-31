@@ -3825,3 +3825,285 @@ button {
   gap: 0.5rem;
   margin-top: 0.75rem;
 }
+
+/* Análisis fundamental IA — Darío */
+.activo-fund-ia-panel--dario {
+  margin-top: 1rem;
+}
+
+.activo-fund-ia-header-dario {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.señal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 1rem;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+.señal-badge-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.señal-badge--comprar {
+  background: var(--gain);
+  color: #fff;
+}
+
+.señal-badge--vender {
+  background: var(--loss);
+  color: #fff;
+}
+
+.señal-badge--mantener {
+  background: #e8c547;
+  color: #2a2408;
+}
+
+.señal-badge--esperar {
+  background: #9ca3af;
+  color: #1a1c20;
+}
+
+.activo-accion-concreta {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-heading);
+  line-height: 1.45;
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--accent-dim);
+  border-radius: var(--radius-sm);
+  border-left: 4px solid var(--accent);
+}
+
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 720px) {
+  .score-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.score-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.75rem;
+}
+
+.score-card--total {
+  border-color: rgba(0, 168, 122, 0.35);
+  box-shadow: 0 0 0 1px rgba(0, 168, 122, 0.12);
+}
+
+.score-card-label {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-family: var(--font-prose);
+  margin-bottom: 0.25rem;
+}
+
+.score-card-val {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.score-card-val--big {
+  font-size: 1.35rem;
+  color: var(--accent);
+}
+
+.score-bar-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border-subtle);
+  margin-top: 0.4rem;
+  overflow: hidden;
+}
+
+.score-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.score-bar-fill--tech {
+  background: #3b82f6;
+}
+
+.score-bar-fill--fund {
+  background: var(--accent);
+}
+
+.score-bar-fill--news {
+  background: #a855f7;
+}
+
+.score-bar-fill--total {
+  background: linear-gradient(90deg, var(--accent), #0a7c52);
+}
+
+.activo-fund-meta-row {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+
+.precio-niveles {
+  margin-bottom: 1.25rem;
+}
+
+.precio-niveles-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.precio-niveles-bar-wrap {
+  margin-top: 0.5rem;
+}
+
+.precio-niveles-bar {
+  position: relative;
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(
+    90deg,
+    rgba(192, 41, 62, 0.25),
+    rgba(0, 168, 122, 0.2)
+  );
+}
+
+.precio-nivel-marker {
+  position: absolute;
+  top: -4px;
+  width: 4px;
+  height: 18px;
+  border-radius: 2px;
+  transform: translateX(-50%);
+}
+
+.precio-nivel-marker--stop {
+  background: var(--loss);
+}
+
+.precio-nivel-marker--entry {
+  background: #2563eb;
+}
+
+.precio-nivel-marker--px {
+  background: var(--text-heading);
+  width: 5px;
+  z-index: 2;
+}
+
+.precio-nivel-marker--tgt {
+  background: var(--gain);
+}
+
+.precio-niveles-legend {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.35rem;
+}
+
+.valuacion-modelos {
+  margin-bottom: 1.25rem;
+}
+
+.valuacion-modelos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.5rem;
+}
+
+.valuacion-modelo-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.75rem;
+  background: var(--bg-card);
+}
+
+.valuacion-modelo-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+  color: var(--text-heading);
+}
+
+.modelo-semaforo {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.modelo-semaforo.on {
+  background: var(--gain);
+  box-shadow: 0 0 0 2px rgba(10, 124, 82, 0.25);
+}
+
+.modelo-semaforo.warn {
+  background: rgba(224, 179, 54, 0.95);
+}
+
+.modelo-desc {
+  font-size: 0.82rem;
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.modelo-metric {
+  font-size: 0.8rem;
+  margin: 0.35rem 0 0;
+  color: var(--text);
+}
+
+.fortalezas-riesgos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 640px) {
+  .fortalezas-riesgos {
+    grid-template-columns: 1fr;
+  }
+}
+
+.activo-catalizadores {
+  margin-bottom: 1rem;
+}

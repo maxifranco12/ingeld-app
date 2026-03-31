@@ -10,8 +10,16 @@ type FundamentalIa = {
   valuacion: string
   confianza: string
   score_salud: number
+  score_tecnico?: number
+  score_fundamental?: number
+  score_noticias?: number
+  score_total?: number
+  señal?: string
+  accion_concreta?: string
+  horizonte?: string
   fortalezas: string[]
   riesgos: string[]
+  catalizadores?: string[]
   resumen: string
 }
 
@@ -242,6 +250,15 @@ export function exportActivoPdf(data: ExportActivoPdfInput) {
     doc.setTextColor(26, 28, 32)
     for (const x of data.fundamentalIa.riesgos || []) line(`• ${x}`)
     y += 1
+    if (data.fundamentalIa.catalizadores?.length) {
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(70, 70, 70)
+      line('Catalizadores')
+      doc.setFont('courier', 'normal')
+      doc.setTextColor(26, 28, 32)
+      for (const x of data.fundamentalIa.catalizadores) line(`• ${x}`)
+      y += 1
+    }
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(70, 70, 70)
     line('Resumen')

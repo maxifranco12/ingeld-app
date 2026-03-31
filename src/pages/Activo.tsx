@@ -83,13 +83,31 @@ type AssetPayload = {
   fundamentals?: Fundamentals
 }
 
+type ValuationModelsPayload = {
+  relative_multiples?: Record<string, unknown>
+  dcf?: Record<string, unknown>
+  ddm?: Record<string, unknown>
+}
+
 type FundamentalIaResponse = {
   valuacion: string
   confianza: string
   score_salud: number
+  score_tecnico?: number
+  score_fundamental?: number
+  score_noticias?: number
+  score_total?: number
+  señal?: string
+  precio_entrada_sugerido?: number | null
+  precio_objetivo?: number | null
+  stop_loss_sugerido?: number | null
+  horizonte?: string
   fortalezas: string[]
   riesgos: string[]
+  catalizadores?: string[]
   resumen: string
+  accion_concreta?: string
+  modelos_valuacion?: ValuationModelsPayload
 }
 
 type NewsItem = {
@@ -114,6 +132,27 @@ const RANGES: ChartRange[] = ['1M', '3M', '6M', '1Y']
 
 const GAIN = '#0a7c52'
 const LOSS = '#c0293e'
+
+function señalBadgeClass(s: string | undefined): string {
+  const u = (s || 'MANTENER').toUpperCase()
+  if (u === 'COMPRAR') return 'señal-badge señal-badge--comprar'
+  if (u === 'VENDER') return 'señal-badge señal-badge--vender'
+  if (u === 'ESPERAR') return 'señal-badge señal-badge--esperar'
+  return 'señal-badge señal-badge--mantener'
+}
+
+function señalIcon(s: string | undefined): string {
+  const u = (s || 'MANTENER').toUpperCase()
+  if (u === 'COMPRAR') return '▲'
+  if (u === 'VENDER') return '▼'
+  if (u === 'ESPERAR') return '◉'
+  return '◆'
+}
+
+function clampScore(n: number | undefined, fallback = 5): number {
+  if (n == null || !Number.isFinite(n)) return fallback
+  return Math.min(10, Math.max(1, Math.round(n)))
+}
 
 function rsiZone(rsi: number | null): 'oversold' | 'overbought' | 'neutral' {
   if (rsi == null) return 'neutral'
@@ -388,6 +427,16 @@ Descripción: ${n.descripcion || ''}`,
           ticker: data.symbol,
           fundamentals: data.fundamentals,
           precio_actual: data.price,
+          tecnico: {
+            rsi14: data.rsi14,
+            macd_direccion: data.macd.direccion,
+            precio_vs_bandas: data.bollinger.precio_vs_bandas,
+            precio_vs_ma20: data.precio_vs_ma20,
+            precio_vs_ma50: data.precio_vs_ma50,
+          },
+          contexto_noticias: newsData?.resumen_macro
+            ? `${newsData.resumen_macro}${newsData.razon_oportunidad ? ` · Oportunidad: ${newsData.razon_oportunidad}` : ''}`
+            : undefined,
         }),
       })
       if (!res.ok) {
@@ -944,21 +993,342 @@ Descripción: ${n.descripcion || ''}`,
                 </button>
               </div>
               {fundIaErr && <div className="error-state">{fundIaErr}</div>}
-              {fundIa && (
-                <div className="chat-panel activo-fund-ia-panel">
-                  <div className="activo-fund-ia-head">
+              {fundIa && data && (
+                <div className="chat-panel activo-fund-ia-panel activo-fund-ia-panel--dario">
+                  <div className="activo-fund-ia-header-dario">
+                    <div className={señalBadgeClass(fundIa.señal)}>
+                      <span className="señal-badge-icon" aria-hidden>
+                        {señalIcon(fundIa.señal)}
+                      </span>
+                      <span className="señal-badge-text">
+                        {(fundIa.señal || 'MANTENER').replace(/_/g, ' ')}
+                      </span>
+                    </div>
                     <span className={`valuation-badge ${valuationClass}`}>
                       {fundIa.valuacion.replace(/_/g, ' ')}
                     </span>
-                    <span className="activo-fund-meta">
-                      Confianza: <strong>{fundIa.confianza}</strong>
-                      {' · '}
-                      Salud: <strong>{fundIa.score_salud}/10</strong>
-                    </span>
                   </div>
-                  <div className="activo-fund-lists">
+                  {fundIa.accion_concreta ? (
+                    <p className="activo-accion-concreta font-prose">{fundIa.accion_concreta}</p>
+                  ) : null}
+
+                  <div className="score-grid">
+                    <div className="score-card">
+                      <span className="score-card-label">Técnico</span>
+                      <span className="score-card-val">
+                        {clampScore(fundIa.score_tecnico)}/10
+                      </span>
+                      <div className="score-bar-track">
+                        <div
+                          className="score-bar-fill score-bar-fill--tech"
+                          style={{ width: `${clampScore(fundIa.score_tecnico) * 10}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="score-card">
+                      <span className="score-card-label">Fundamental</span>
+                      <span className="score-card-val">
+                        {clampScore(fundIa.score_fundamental)}/10
+                      </span>
+                      <div className="score-bar-track">
+                        <div
+                          className="score-bar-fill score-bar-fill--fund"
+                          style={{ width: `${clampScore(fundIa.score_fundamental) * 10}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="score-card">
+                      <span className="score-card-label">Noticias</span>
+                      <span className="score-card-val">
+                        {clampScore(fundIa.score_noticias)}/10
+                      </span>
+                      <div className="score-bar-track">
+                        <div
+                          className="score-bar-fill score-bar-fill--news"
+                          style={{ width: `${clampScore(fundIa.score_noticias) * 10}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="score-card score-card--total">
+                      <span className="score-card-label">Total</span>
+                      <span className="score-card-val score-card-val--big">
+                        {clampScore(fundIa.score_total)}/10
+                      </span>
+                      <div className="score-bar-track">
+                        <div
+                          className="score-bar-fill score-bar-fill--total"
+                          style={{ width: `${clampScore(fundIa.score_total) * 10}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="activo-fund-meta-row font-prose">
+                    Confianza: <strong>{fundIa.confianza}</strong>
+                    {' · '}
+                    Salud: <strong>{fundIa.score_salud}/10</strong>
+                    {fundIa.horizonte ? (
+                      <>
+                        {' · '}
+                        Horizonte: <strong>{fundIa.horizonte}</strong>
+                      </>
+                    ) : null}
+                  </p>
+
+                  {(fundIa.precio_entrada_sugerido != null &&
+                    Number.isFinite(fundIa.precio_entrada_sugerido)) ||
+                  (fundIa.precio_objetivo != null && Number.isFinite(fundIa.precio_objetivo)) ||
+                  (fundIa.stop_loss_sugerido != null && Number.isFinite(fundIa.stop_loss_sugerido)) ? (
+                    <div className="precio-niveles">
+                      <h4 className="activo-fund-mini-title">Niveles sugeridos</h4>
+                      <ul className="precio-niveles-list font-prose">
+                        {fundIa.precio_entrada_sugerido != null &&
+                        Number.isFinite(fundIa.precio_entrada_sugerido) ? (
+                          <li>
+                            Entrada:{' '}
+                            <strong>
+                              {fundIa.precio_entrada_sugerido.toLocaleString('es-AR', {
+                                maximumFractionDigits: 4,
+                              })}{' '}
+                              {data.info.moneda}
+                            </strong>
+                          </li>
+                        ) : null}
+                        {fundIa.precio_objetivo != null && Number.isFinite(fundIa.precio_objetivo) ? (
+                          <li>
+                            Objetivo:{' '}
+                            <strong>
+                              {fundIa.precio_objetivo.toLocaleString('es-AR', {
+                                maximumFractionDigits: 4,
+                              })}{' '}
+                              {data.info.moneda}
+                            </strong>
+                            {data.price > 0 ? (
+                              <span className="gain">
+                                {' '}
+                                (
+                                {(
+                                  ((fundIa.precio_objetivo - data.price) / data.price) *
+                                  100
+                                ).toFixed(2)}
+                                % vs actual)
+                              </span>
+                            ) : null}
+                          </li>
+                        ) : null}
+                        {fundIa.stop_loss_sugerido != null &&
+                        Number.isFinite(fundIa.stop_loss_sugerido) ? (
+                          <li>
+                            Stop:{' '}
+                            <strong>
+                              {fundIa.stop_loss_sugerido.toLocaleString('es-AR', {
+                                maximumFractionDigits: 4,
+                              })}{' '}
+                              {data.info.moneda}
+                            </strong>
+                            {data.price > 0 ? (
+                              <span className="loss">
+                                {' '}
+                                (
+                                {(
+                                  ((fundIa.stop_loss_sugerido - data.price) / data.price) *
+                                  100
+                                ).toFixed(2)}
+                                % vs actual)
+                              </span>
+                            ) : null}
+                          </li>
+                        ) : null}
+                      </ul>
+                      {(() => {
+                        const pts = [
+                          fundIa.stop_loss_sugerido,
+                          fundIa.precio_entrada_sugerido,
+                          data.price,
+                          fundIa.precio_objetivo,
+                        ].filter((x): x is number => x != null && Number.isFinite(x))
+                        if (pts.length < 2) return null
+                        const lo = Math.min(...pts)
+                        const hi = Math.max(...pts)
+                        const span = hi - lo || 1
+                        const pct = (p: number) => ((p - lo) / span) * 100
+                        return (
+                          <div className="precio-niveles-bar-wrap" aria-hidden>
+                            <div className="precio-niveles-bar">
+                              {fundIa.stop_loss_sugerido != null &&
+                              Number.isFinite(fundIa.stop_loss_sugerido) ? (
+                                <span
+                                  className="precio-nivel-marker precio-nivel-marker--stop"
+                                  style={{ left: `${pct(fundIa.stop_loss_sugerido)}%` }}
+                                  title="Stop"
+                                />
+                              ) : null}
+                              {fundIa.precio_entrada_sugerido != null &&
+                              Number.isFinite(fundIa.precio_entrada_sugerido) ? (
+                                <span
+                                  className="precio-nivel-marker precio-nivel-marker--entry"
+                                  style={{ left: `${pct(fundIa.precio_entrada_sugerido)}%` }}
+                                  title="Entrada"
+                                />
+                              ) : null}
+                              <span
+                                className="precio-nivel-marker precio-nivel-marker--px"
+                                style={{ left: `${pct(data.price)}%` }}
+                                title="Precio actual"
+                              />
+                              {fundIa.precio_objetivo != null &&
+                              Number.isFinite(fundIa.precio_objetivo) ? (
+                                <span
+                                  className="precio-nivel-marker precio-nivel-marker--tgt"
+                                  style={{ left: `${pct(fundIa.precio_objetivo)}%` }}
+                                  title="Objetivo"
+                                />
+                              ) : null}
+                            </div>
+                            <div className="precio-niveles-legend font-prose">
+                              <span>{lo.toFixed(2)}</span>
+                              <span>Precio actual {data.price.toFixed(4)}</span>
+                              <span>{hi.toFixed(2)}</span>
+                            </div>
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  ) : null}
+
+                  {fundIa.modelos_valuacion ? (
+                    <div className="valuacion-modelos">
+                      <h4 className="activo-fund-mini-title">Modelos de valuación</h4>
+                      <div className="valuacion-modelos-grid">
+                        <article className="valuacion-modelo-card">
+                          <div className="valuacion-modelo-head">
+                            <span>Múltiplos relativos</span>
+                            {(() => {
+                              const rm = fundIa.modelos_valuacion?.relative_multiples as
+                                | Record<string, unknown>
+                                | undefined
+                              const prom = rm?.promedio_descuento
+                              const ok =
+                                typeof prom === 'number' && Number.isFinite(prom) && prom > 3
+                              const bad =
+                                typeof prom === 'number' && Number.isFinite(prom) && prom < -3
+                              return (
+                                <span
+                                  className={`modelo-semaforo ${ok ? 'on' : ''} ${bad ? 'warn' : ''}`}
+                                />
+                              )
+                            })()}
+                          </div>
+                          <p className="font-prose modelo-desc">
+                            {(fundIa.modelos_valuacion.relative_multiples as { valuacion_relativa?: string })
+                              ?.valuacion_relativa || '—'}
+                          </p>
+                          {(() => {
+                            const rm = fundIa.modelos_valuacion?.relative_multiples as
+                              | Record<string, unknown>
+                              | undefined
+                            const p = rm?.promedio_descuento
+                            return typeof p === 'number' && Number.isFinite(p) ? (
+                              <p className="font-prose modelo-metric">
+                                vs sector (prom. descuento múltiplos):{' '}
+                                <strong>{p.toFixed(1)}%</strong>
+                              </p>
+                            ) : null
+                          })()}
+                        </article>
+                        <article className="valuacion-modelo-card">
+                          <div className="valuacion-modelo-head">
+                            <span>DCF simplificado</span>
+                            {(() => {
+                              const d = fundIa.modelos_valuacion?.dcf as
+                                | Record<string, unknown>
+                                | undefined
+                              const up = d?.upside_dcf
+                              const ok =
+                                d?.disponible === true &&
+                                typeof up === 'number' &&
+                                up > 0
+                              const bad =
+                                d?.disponible === true &&
+                                typeof up === 'number' &&
+                                up < 0
+                              return (
+                                <span
+                                  className={`modelo-semaforo ${ok ? 'on' : ''} ${bad ? 'warn' : ''}`}
+                                />
+                              )
+                            })()}
+                          </div>
+                          {(() => {
+                            const d = fundIa.modelos_valuacion?.dcf as Record<string, unknown> | undefined
+                            if (!d?.disponible) {
+                              return (
+                                <p className="font-prose modelo-desc">
+                                  {String(d?.mensaje || 'datos insuficientes')}
+                                </p>
+                              )
+                            }
+                            return (
+                              <>
+                                <p className="font-prose modelo-metric">
+                                  Valor intrínseco est.:{' '}
+                                  <strong>
+                                    {Number(d.valor_intrinseco).toLocaleString('es-AR', {
+                                      maximumFractionDigits: 4,
+                                    })}
+                                  </strong>{' '}
+                                  · Upside DCF:{' '}
+                                  <strong>{Number(d.upside_dcf).toFixed(2)}%</strong> · Conf.:{' '}
+                                  {String(d.confianza_dcf || '—')}
+                                </p>
+                              </>
+                            )
+                          })()}
+                        </article>
+                        <article className="valuacion-modelo-card">
+                          <div className="valuacion-modelo-head">
+                            <span>DDM (Gordon)</span>
+                            {(() => {
+                              const dm = fundIa.modelos_valuacion?.ddm as
+                                | Record<string, unknown>
+                                | undefined
+                              const up = dm?.upside_ddm
+                              const ok = dm?.aplicable === true && typeof up === 'number' && up > 0
+                              const bad = dm?.aplicable === true && typeof up === 'number' && up < 0
+                              return (
+                                <span
+                                  className={`modelo-semaforo ${ok ? 'on' : ''} ${bad ? 'warn' : ''}`}
+                                />
+                              )
+                            })()}
+                          </div>
+                          {(() => {
+                            const dm = fundIa.modelos_valuacion?.ddm as Record<string, unknown> | undefined
+                            if (!dm?.aplicable) {
+                              return (
+                                <p className="font-prose modelo-desc">Sin dividendo relevante</p>
+                              )
+                            }
+                            return (
+                              <p className="font-prose modelo-metric">
+                                Valor DDM:{' '}
+                                <strong>
+                                  {Number(dm.valor_ddm).toLocaleString('es-AR', {
+                                    maximumFractionDigits: 4,
+                                  })}
+                                </strong>{' '}
+                                · Upside: <strong>{Number(dm.upside_ddm).toFixed(2)}%</strong>
+                              </p>
+                            )
+                          })()}
+                        </article>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="fortalezas-riesgos">
                     <div>
-                      <h4 className="activo-fund-mini-title">Fortalezas</h4>
+                      <h4 className="activo-fund-mini-title">✅ Fortalezas</h4>
                       <ul className="activo-fund-ul font-prose">
                         {fundIa.fortalezas.map((x, i) => (
                           <li key={`f-${i}-${x.slice(0, 24)}`}>{x}</li>
@@ -966,7 +1336,7 @@ Descripción: ${n.descripcion || ''}`,
                       </ul>
                     </div>
                     <div>
-                      <h4 className="activo-fund-mini-title">Riesgos</h4>
+                      <h4 className="activo-fund-mini-title">⚠️ Riesgos</h4>
                       <ul className="activo-fund-ul font-prose">
                         {fundIa.riesgos.map((x, i) => (
                           <li key={`r-${i}-${x.slice(0, 24)}`}>{x}</li>
@@ -974,8 +1344,20 @@ Descripción: ${n.descripcion || ''}`,
                       </ul>
                     </div>
                   </div>
+
+                  {fundIa.catalizadores && fundIa.catalizadores.length > 0 ? (
+                    <div className="activo-catalizadores">
+                      <h4 className="activo-fund-mini-title">⚡ Catalizadores a monitorear</h4>
+                      <ul className="activo-fund-ul font-prose">
+                        {fundIa.catalizadores.map((x, i) => (
+                          <li key={`c-${i}-${x.slice(0, 24)}`}>{x}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
                   <div className="chat-msg chat-msg-assistant activo-fund-resumen">
-                    <div className="chat-msg-meta">Claude</div>
+                    <div className="chat-msg-meta">Darío · Análisis INGELD</div>
                     <div className="chat-msg-body font-prose">{fundIa.resumen}</div>
                   </div>
                 </div>
