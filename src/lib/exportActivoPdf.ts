@@ -1,4 +1,6 @@
 import { jsPDF } from 'jspdf'
+import html2canvas from 'html2canvas'
+import type { RefObject } from 'react'
 
 import { markdownToPlainText } from './markdownPlain'
 
@@ -90,6 +92,11 @@ type ExportActivoPdfInput = {
   fundamentalIa?: FundamentalIa | null
   financialsData?: FinancialsData | null
   newsData?: { noticias: NewsItem[] } | null
+  chartRefs?: {
+    income: RefObject<HTMLDivElement | null> | null
+    cashflow: RefObject<HTMLDivElement | null> | null
+    valuation: RefObject<HTMLDivElement | null> | null
+  }
 }
 
 function fmtNum(n: number | null | undefined, max = 4): string {
@@ -135,7 +142,7 @@ function valSemaforo(target: number | null | undefined, price: number): 'BARATA'
   return 'JUSTA'
 }
 
-export function exportActivoPdf(data: ExportActivoPdfInput) {
+export async function exportActivoPdf(data: ExportActivoPdfInput) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
@@ -202,6 +209,25 @@ export function exportActivoPdf(data: ExportActivoPdfInput) {
     doc.setFont('courier', 'normal')
     doc.setTextColor(26, 28, 32)
   }
+  const addChartImage = async (
+    title: string,
+    refObj: RefObject<HTMLDivElement | null> | null | undefined,
+  ): Promise<boolean> => {
+    try {
+      if (!refObj?.current) return false
+      const canvas = await html2canvas(refObj.current, { scale: 2, backgroundColor: '#ffffff' })
+      const img = canvas.toDataURL('image/png')
+      const targetW = 170
+      const targetH = (canvas.height * targetW) / canvas.width
+      section(title)
+      ensure(targetH + 4)
+      doc.addImage(img, 'PNG', MARGIN_MM, y, targetW, targetH)
+      y += targetH + 4
+      return true
+    } catch {
+      return false
+    }
+  }
 
   doc.setFont('courier', 'bold')
   doc.setTextColor(0, 168, 122)
@@ -258,20 +284,25 @@ export function exportActivoPdf(data: ExportActivoPdfInput) {
 
   if (data.financialsData?.años?.length) {
     section('Tendencias Financieras')
-    const years = data.financialsData.años
-    const row = (label: string, vals: Array<number | null | undefined>) => {
-      const cells = vals.map((v) => fmtBig(v)).join(' | ')
-      line(`${label}: ${cells}`)
+    const incomeOk = await addChartImage('Chart: Ingresos y rentabilidad', data.chartRefs?.income)
+    const cashOk = await addChartImage('Chart: Flujo de caja', data.chartRefs?.cashflow)
+    const valOk = await addChartImage('Chart: Valuación', data.chartRefs?.valuation)
+    if (!incomeOk || !cashOk || !valOk) {
+      const years = data.financialsData.años
+      const row = (label: string, vals: Array<number | null | undefined>) => {
+        const cells = vals.map((v) => fmtBig(v)).join(' | ')
+        line(`${label}: ${cells}`)
+      }
+      subtitle(`Income Statement (${years.join(' | ')})`)
+      row('Revenue', data.financialsData.income.revenue)
+      row('Operating Income', data.financialsData.income.operating_income)
+      row('Net Income', data.financialsData.income.net_income)
+      y += 1
+      subtitle(`Cash Flow (${years.join(' | ')})`)
+      row('Operating CF', data.financialsData.cashflow.operating_cashflow)
+      row('FCF', data.financialsData.cashflow.free_cashflow)
+      y += 2
     }
-    subtitle(`Income Statement (${years.join(' | ')})`)
-    row('Revenue', data.financialsData.income.revenue)
-    row('Operating Income', data.financialsData.income.operating_income)
-    row('Net Income', data.financialsData.income.net_income)
-    y += 1
-    subtitle(`Cash Flow (${years.join(' | ')})`)
-    row('Operating CF', data.financialsData.cashflow.operating_cashflow)
-    row('FCF', data.financialsData.cashflow.free_cashflow)
-    y += 2
   }
 
   const f = data.fundamentals

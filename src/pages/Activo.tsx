@@ -305,6 +305,9 @@ export function Activo() {
   const [error, setError] = useState<string | null>(null)
   const [assetNotFound, setAssetNotFound] = useState(false)
   const chartRef = useRef<HTMLDivElement>(null)
+  const incomeChartRef = useRef<HTMLDivElement>(null)
+  const cashflowChartRef = useRef<HTMLDivElement>(null)
+  const valuationChartRef = useRef<HTMLDivElement>(null)
   const chartApiRef = useRef<ReturnType<typeof createChart> | null>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const seriesRef = useRef<any>(null)
@@ -831,7 +834,7 @@ Descripción: ${n.descripcion || ''}`,
                 type="button"
                 className="activo-export-btn"
                 onClick={() =>
-                  exportActivoPdf({
+                  void exportActivoPdf({
                     symbol: data.symbol,
                     companyName: data.info.nombre,
                     exchange: data.info.exchange,
@@ -850,6 +853,11 @@ Descripción: ${n.descripcion || ''}`,
                     fundamentalIa: fundIa ?? null,
                     financialsData: financials ?? null,
                     newsData: newsData ?? null,
+                    chartRefs: {
+                      income: incomeChartRef,
+                      cashflow: cashflowChartRef,
+                      valuation: valuationChartRef,
+                    },
                   })
                 }
               >
@@ -971,7 +979,7 @@ Descripción: ${n.descripcion || ''}`,
             {!financialsLoading && financials && (
               <>
                 <div className="financials-chart-grid">
-                  <div className="chart-container">
+                  <div className="chart-container" ref={incomeChartRef}>
                     <h3 className="chart-title">Ingresos y rentabilidad</h3>
                     <p className="chart-subtitle font-prose">Anual</p>
                     <ResponsiveContainer width="100%" height={280}>
@@ -995,7 +1003,7 @@ Descripción: ${n.descripcion || ''}`,
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
-                  <div className="chart-container">
+                  <div className="chart-container" ref={cashflowChartRef}>
                     <h3 className="chart-title">Flujo de caja</h3>
                     <p className="chart-subtitle font-prose">Anual</p>
                     <ResponsiveContainer width="100%" height={280}>
@@ -1019,7 +1027,7 @@ Descripción: ${n.descripcion || ''}`,
                     </ResponsiveContainer>
                   </div>
                 </div>
-                <div className="chart-container valuation-chart">
+                <div className="chart-container valuation-chart" ref={valuationChartRef}>
                   <h3 className="chart-title">¿A qué precio vale la empresa?</h3>
                   <p className="chart-subtitle font-prose">Comparación de modelos de valuación vs precio actual</p>
                   {valuationBars.length ? (
