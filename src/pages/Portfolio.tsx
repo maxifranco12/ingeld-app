@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import { useAuth } from '../context/AuthContext'
 import { exportPortfolioPdf } from '../lib/exportAnalisisPdf'
 import { exportPortfolioExcel } from '../lib/exportPortfolioExcel'
 import { AnalysisMarkdown } from '../lib/renderAnalysisMarkdown'
@@ -58,12 +59,29 @@ function savePositions(list: Position[]) {
   localStorage.setItem(LS_KEY, JSON.stringify(list))
 }
 
+function parsePortfolioRaw(raw: unknown): Position[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((x) => x as Position)
+    .filter(
+      (x) =>
+        x &&
+        typeof x.id === 'string' &&
+        typeof x.ticker === 'string' &&
+        typeof x.cantidad === 'number' &&
+        typeof x.precioCompra === 'number' &&
+        (x.moneda === 'USD' || x.moneda === 'ARS'),
+    )
+}
+
 function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
 export function Portfolio() {
+  const { token, isAuthenticated } = useAuth()
   const [positions, setPositions] = useState<Position[]>(() => loadPositions())
+  const [profileHydrated, setProfileHydrated] = useState(false)
   const [quotes, setQuotes] = useState<Record<string, QuoteRow>>({})
   const [loading, setLoading] = useState(false)
   const [modal, setModal] = useState(false)
@@ -111,8 +129,63 @@ export function Portfolio() {
   }, [refreshQuotes])
 
   useEffect(() => {
+    if (!isAuthenticated || !token) {
+      setProfileHydrated(true)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(`${API}/api/auth/profile`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) throw new Error('profile')
+        const j = (await res.json()) as { portfolio?: unknown }
+        const server = parsePortfolioRaw(j.portfolio)
+        const local = loadPositions()
+        if (cancelled) return
+        if (server.length > 0) {
+          setPositions(server)
+          savePositions(server)
+        } else if (local.length > 0) {
+          await fetch(`${API}/api/auth/profile`, {
+            method: 'PUT',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ portfolio: local }),
+          })
+        }
+      } catch {
+        /* localStorage ya cargado */
+      } finally {
+        if (!cancelled) setProfileHydrated(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isAuthenticated, token])
+
+  useEffect(() => {
     savePositions(positions)
   }, [positions])
+
+  useEffect(() => {
+    if (!profileHydrated || !token) return
+    const handle = setTimeout(() => {
+      void fetch(`${API}/api/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ portfolio: positions }),
+      })
+    }, 500)
+    return () => clearTimeout(handle)
+  }, [positions, token, profileHydrated])
 
   const rows = useMemo(() => {
     return positions.map((p) => {

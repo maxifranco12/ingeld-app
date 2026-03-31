@@ -26,3 +26,4 @@ dist-ssr
 # Backend secrets and local data
 backend/.env
 backend/data/
+backend/ingeld.db
