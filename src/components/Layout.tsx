@@ -4,13 +4,14 @@ import { useAuth } from '../context/AuthContext'
 import { TickerTape } from './TickerTape'
 
 const nav: { to: string; label: string; end?: boolean }[] = [
-  { to: '/', label: 'Panel', end: true },
+  { to: '/panel', label: 'Panel', end: true },
   { to: '/buscador', label: 'Buscador' },
   { to: '/scanner', label: 'Scanner' },
   { to: '/favoritos', label: 'Favoritos' },
   { to: '/portfolio', label: 'Portfolio' },
   { to: '/alertas', label: 'Alertas' },
   { to: '/analisis', label: 'Análisis' },
+  { to: '/comparador', label: 'Comparador' },
 ]
 
 export function Layout() {
@@ -30,7 +31,7 @@ export function Layout() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <NavLink to="/" className="brand" end>
+        <NavLink to="/panel" className="brand" end>
           <span className="brand-mark">INGELD</span>
           <span className="brand-tag">Financial Assistant</span>
         </NavLink>
@@ -79,11 +80,23 @@ export function Layout() {
                     className="header-user-menu-item font-prose"
                     onClick={() => {
                       setMenuOpen(false)
+                      navigate('/historial')
+                    }}
+                  >
+                    Mi historial
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="header-user-menu-item font-prose"
+                    onClick={() => {
+                      setMenuOpen(false)
                       navigate('/perfil')
                     }}
                   >
                     Mi perfil
                   </button>
+                  <div className="header-user-sep" />
                   {isAdmin ? (
                     <button
                       type="button"

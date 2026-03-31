@@ -25,7 +25,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from auth_middleware import CurrentUser
-from database import PasswordReset, User, UserProfile, get_db, utcnow
+from database import AnalysisHistory, PasswordReset, User, UserProfile, get_db, utcnow
 
 router = APIRouter()
 
@@ -106,6 +106,14 @@ class ProfileUpdateBody(BaseModel):
 class ChangePasswordBody(BaseModel):
     current_password: str
     new_password: str = Field(..., min_length=8)
+
+
+class HistorialCreateBody(BaseModel):
+    ticker: str
+    tipo: str
+    señal: Optional[str] = None
+    resumen: str
+    score_total: Optional[int] = None
 
 
 def _ensure_profile(db: Session, user: User) -> UserProfile:
@@ -285,3 +293,54 @@ def change_password(
     user.hashed_password = _hash_password(body.new_password)
     db.commit()
     return {"ok": "true"}
+
+
+@router.get("/historial")
+def get_historial(user: CurrentUser, db: Session = Depends(get_db)) -> dict[str, Any]:
+    rows = (
+        db.query(AnalysisHistory)
+        .filter(AnalysisHistory.user_id == user.id)
+        .order_by(AnalysisHistory.id.desc())
+        .limit(20)
+        .all()
+    )
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "ticker": r.ticker,
+                "tipo": r.tipo,
+                "señal": r.señal,
+                "resumen": r.resumen,
+                "score_total": r.score_total,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.post("/historial")
+def post_historial(
+    body: HistorialCreateBody,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    t = body.ticker.strip().upper()
+    if not t:
+        raise HTTPException(400, "ticker requerido")
+    tipo = body.tipo.strip().lower()
+    if tipo not in ("fundamental", "chat", "portfolio"):
+        raise HTTPException(400, "tipo inválido")
+    item = AnalysisHistory(
+        user_id=user.id,
+        ticker=t,
+        tipo=tipo,
+        señal=(body.señal or "").strip().upper() or None,
+        resumen=body.resumen.strip() or "(Sin resumen)",
+        score_total=body.score_total,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return {"ok": "true", "id": item.id}

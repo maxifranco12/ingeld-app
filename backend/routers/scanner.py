@@ -223,7 +223,7 @@ def _claude_analyze(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         "Respondé en español, tono directo y profesional. "
         "Tu salida debe ser únicamente JSON válido, sin markdown ni texto adicional."
     )
-    user = f"""Candidatos técnicos filtrados (criterios Darío: RSI extremo, cruce MACD histograma, volumen > 1,3× media 20d):
+    user = f"""Candidatos técnicos filtrados (criterios de analista senior: RSI extremo, cruce MACD histograma, volumen > 1,3× media 20d):
 
 {json.dumps(payload, ensure_ascii=False, indent=2)}
 

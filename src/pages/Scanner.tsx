@@ -30,7 +30,7 @@ type ScannerResponse = {
 }
 
 const SCORE_TOOLTIP =
-  'Puntos Darío (máx. 3): RSI <35 o >70, cruce de histograma MACD en últimos 5 cierres, volumen >1,3× media 20 sesiones.'
+  'Puntos de analista (máx. 3): RSI <35 o >70, cruce de histograma MACD en últimos 5 cierres, volumen >1,3× media 20 sesiones.'
 
 function badgeClass(signal: string) {
   if (signal === 'COMPRAR') return 'scanner-badge-comprar'
@@ -159,7 +159,7 @@ export function Scanner() {
                       className="scanner-score"
                       title={SCORE_TOOLTIP}
                     >
-                      Score Darío: {c.score}/3
+                      Score técnico: {c.score}/3
                     </span>
                   </div>
 

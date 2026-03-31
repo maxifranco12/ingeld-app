@@ -34,7 +34,7 @@ export function AdminOnly() {
   }
 
   if (!isAdmin) {
-    return <Navigate to="/" replace />
+    return <Navigate to="/panel" replace />
   }
 
   return <Admin />

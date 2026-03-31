@@ -11,6 +11,7 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 import { exportActivoPdf } from '../lib/exportActivoPdf'
 import { useFavoritos } from '../hooks/useFavoritos'
 
@@ -246,6 +247,7 @@ function sourceBadgeClass(source: string | undefined): string {
 }
 
 export function Activo() {
+  const { token } = useAuth()
   const { symbol: rawSymbol } = useParams<{ symbol: string }>()
   const navigate = useNavigate()
   const { toggleFavorito, esFavorito } = useFavoritos()
@@ -495,7 +497,24 @@ Descripción: ${n.descripcion || ''}`,
         const t = await res.text()
         throw new Error(t || `HTTP ${res.status}`)
       }
-      setFundIa((await res.json()) as FundamentalIaResponse)
+      const parsed = (await res.json()) as FundamentalIaResponse
+      setFundIa(parsed)
+      if (token) {
+        void fetch(`${API}/api/auth/historial`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            ticker: data.symbol,
+            tipo: 'fundamental',
+            señal: parsed.señal ?? null,
+            resumen: parsed.accion_concreta || parsed.resumen,
+            score_total: parsed.score_total ?? null,
+          }),
+        })
+      }
     } catch (e) {
       setFundIaErr(e instanceof Error ? e.message : 'Error')
       setFundIa(null)
@@ -1413,7 +1432,7 @@ Descripción: ${n.descripcion || ''}`,
                   ) : null}
 
                   <div className="chat-msg chat-msg-assistant activo-fund-resumen">
-                    <div className="chat-msg-meta">Darío · Análisis INGELD</div>
+                    <div className="chat-msg-meta">Analista senior · Análisis INGELD</div>
                     <div className="chat-msg-body font-prose">{fundIa.resumen}</div>
                   </div>
                 </div>

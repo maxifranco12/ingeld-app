@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { AdminOnly, ProtectedRoute } from './components/ProtectedRoute'
+import { useAuth } from './context/AuthContext'
 import { Dashboard } from './pages/Dashboard'
 import { Analisis } from './pages/Analisis'
 import { Buscador } from './pages/Buscador'
@@ -14,27 +15,39 @@ import { Login } from './pages/Login'
 import { Register } from './pages/Register'
 import { ForgotPassword } from './pages/ForgotPassword'
 import { Perfil } from './pages/Perfil'
+import { Landing } from './pages/Landing'
+import { Comparador } from './pages/Comparador'
+import { Historial } from './pages/Historial'
+
+function RootRoute() {
+  const { isAuthenticated, loading } = useAuth()
+  if (loading) return <Landing />
+  return isAuthenticated ? <Navigate to="/panel" replace /> : <Landing />
+}
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<RootRoute />} />
+        <Route path="/buscador" element={<Buscador />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
 
         <Route element={<ProtectedRoute />}>
           <Route path="/" element={<Layout />}>
-            <Route index element={<Dashboard />} />
+            <Route path="panel" element={<Dashboard />} />
             <Route path="scanner" element={<Scanner />} />
             <Route path="favoritos" element={<Favoritos />} />
-            <Route path="buscador" element={<Buscador />} />
             <Route path="activo/:symbol" element={<Activo />} />
             <Route path="portfolio" element={<Portfolio />} />
             <Route path="configuracion" element={<Configuracion />} />
             <Route path="alertas" element={<Alertas />} />
             <Route path="analisis" element={<Analisis />} />
             <Route path="perfil" element={<Perfil />} />
+            <Route path="comparador" element={<Comparador />} />
+            <Route path="historial" element={<Historial />} />
             <Route path="admin" element={<AdminOnly />} />
           </Route>
         </Route>

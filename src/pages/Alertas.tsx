@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FocusEvent } from 'react'
+import { useAuth } from '../context/AuthContext'
 
 const API = import.meta.env.VITE_API_URL ?? ''
 
@@ -115,6 +116,7 @@ function valorFieldLabel(tipo: string, preview: AssetPreview | null): string {
 }
 
 export function Alertas() {
+  const { user, token } = useAuth()
   const [alerts, setAlerts] = useState<Alerta[]>([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
@@ -198,7 +200,14 @@ export function Alertas() {
     const res = await fetch(`${API}/api/alerts/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ticker: t, tipo: form.tipo, valor: v }),
+      body: JSON.stringify({
+        ticker: t,
+        tipo: form.tipo,
+        valor: v,
+        user_id: user?.id ?? null,
+        user_email: user?.email ?? null,
+        token: token ?? null,
+      }),
     })
     if (!res.ok) return
     setModal(false)

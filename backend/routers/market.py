@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import copy
+import json
 import math
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
@@ -12,6 +14,7 @@ from typing import Any, Optional
 import numpy as np
 import pandas as pd
 import yfinance as yf
+from anthropic import Anthropic
 from fastapi import APIRouter, HTTPException, Query
 
 router = APIRouter()
@@ -67,6 +70,8 @@ PULSE_SPECS: list[tuple[str, str]] = [
 CANDIDATE_SYMBOLS = ["GGAL.BA", "SPY", "AL30.BA"]
 
 USD_FALLBACKS = ["ARS=X", "USDARS=X"]
+_AI_SUMMARY_CACHE: dict[str, Any] = {"ts": 0.0, "payload": None}
+_AI_SUMMARY_TTL_SEC = 1800.0
 
 
 def _rsi(close: pd.Series, period: int = 14) -> Optional[float]:
@@ -665,17 +670,69 @@ def market_tape() -> dict[str, Any]:
 
 @router.get("/ai-summary")
 def ai_summary() -> dict[str, Any]:
-    """Resumen diario IA (placeholder hasta integrar modelo)."""
-    today = date.today().isoformat()
-    return {
-        "date": today,
-        "text": (
-            "Placeholder: la sesión muestra ajustes técnicos en activos locales y "
-            "referencias globales estables. Pendiente de generación con IA según tu cartera "
-            "y noticias del día."
-        ),
-        "source": "placeholder",
-    }
+    now = time.time()
+    hit = _AI_SUMMARY_CACHE.get("payload")
+    ts = float(_AI_SUMMARY_CACHE.get("ts") or 0.0)
+    if hit is not None and now - ts < _AI_SUMMARY_TTL_SEC:
+        return copy.deepcopy(hit)
+
+    specs = [
+        ("^MERV", "MERVAL"),
+        ("^GSPC", "S&P500"),
+        ("^IXIC", "Nasdaq"),
+        ("BTC-USD", "BTC"),
+        ("DX-Y.NYB", "DXY"),
+        ("CL=F", "Petróleo"),
+        ("GC=F", "Oro"),
+    ]
+    mercados: dict[str, dict[str, Any]] = {}
+    for sym, label in specs:
+        q = _safe_quote(sym)
+        if q:
+            mercados[label] = {
+                "symbol": sym,
+                "price": q.get("price"),
+                "changePct": q.get("changePct"),
+                "currency": q.get("currency", ""),
+            }
+
+    fecha = date.today().isoformat()
+    key = (os.getenv("ANTHROPIC_API_KEY") or "").strip()
+    resumen = (
+        "No se pudo generar briefing IA en este momento. "
+        "Revisá conectividad o la clave de Anthropic."
+    )
+    if key:
+        try:
+            client = Anthropic(api_key=key)
+            user_prompt = (
+                "Mercados (JSON):\n"
+                + json.dumps(mercados, ensure_ascii=False, indent=2)
+                + "\n\nGenerá briefing diario."
+            )
+            msg = client.messages.create(
+                model="claude-sonnet-4-5",
+                max_tokens=900,
+                system=(
+                    "Sos un analista financiero senior. Generá un briefing profesional de mercado para "
+                    "inversores de equity global y argentino. Máximo 4 párrafos. "
+                    "Destacá las oportunidades y riesgos del día. Sé directo y accionable."
+                ),
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            out = ""
+            for b in msg.content:
+                if b.type == "text":
+                    out += b.text
+            if out.strip():
+                resumen = out.strip()
+        except Exception:
+            pass
+
+    payload = {"fecha": fecha, "resumen": resumen, "mercados": mercados}
+    _AI_SUMMARY_CACHE["ts"] = now
+    _AI_SUMMARY_CACHE["payload"] = copy.deepcopy(payload)
+    return payload
 
 
 @router.get("/candidates")

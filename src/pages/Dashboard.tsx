@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useFavoritos } from '../hooks/useFavoritos'
 
 const API = import.meta.env.VITE_API_URL ?? ''
@@ -30,8 +30,12 @@ type OverviewResponse = {
 }
 
 type AiSummary = {
-  date: string
-  text: string
+  fecha: string
+  resumen: string
+  mercados: Record<
+    string,
+    { symbol: string; price: number; changePct: number; currency?: string }
+  >
 }
 
 type CandidateItem = {
@@ -94,6 +98,7 @@ function formatDate(iso: string) {
 }
 
 export function Dashboard() {
+  const navigate = useNavigate()
   const { favoritos } = useFavoritos()
   const [favItems, setFavItems] = useState<OverviewItem[]>([])
   const [pulse, setPulse] = useState<{ items: PulseItem[]; errors: string[] } | null>(
@@ -192,6 +197,12 @@ export function Dashboard() {
     })
   }, [overview, scanFilter])
 
+  const goToActivo = (ticker: string) => {
+    const sym = (ticker || '').trim()
+    if (!sym) return
+    navigate(`/activo/${encodeURIComponent(sym)}`)
+  }
+
   return (
     <div className="dashboard">
       <h1 className="page-title">Panel</h1>
@@ -218,7 +229,19 @@ export function Dashboard() {
               )
               const pos = row ? row.changePct >= 0 : false
               return (
-                <article key={sym} className="fav-compact-card">
+                <article
+                  key={sym}
+                  className="fav-compact-card dash-clickable"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => goToActivo(sym)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      goToActivo(sym)
+                    }
+                  }}
+                >
                   <div className="fav-compact-tick">{sym}</div>
                   {row ? (
                     <>
@@ -256,7 +279,23 @@ export function Dashboard() {
             {pulse.items.map((p) => {
               const pos = p.changePct >= 0
               return (
-                <article key={p.symbol + p.label} className="pulse-card">
+                <article
+                  key={p.symbol + p.label}
+                  className={`pulse-card ${p.symbol ? 'dash-clickable' : ''}`}
+                  role={p.symbol ? 'button' : undefined}
+                  tabIndex={p.symbol ? 0 : -1}
+                  onClick={p.symbol ? () => goToActivo(p.symbol) : undefined}
+                  onKeyDown={
+                    p.symbol
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            goToActivo(p.symbol)
+                          }
+                        }
+                      : undefined
+                  }
+                >
                   <div className="pulse-label">{p.label}</div>
                   <div className="pulse-value">
                     {formatPrice(p.price, p.currency)}
@@ -281,12 +320,22 @@ export function Dashboard() {
         <div className="ai-bar">
           <div className="ai-bar-body">
             <p className="ai-bar-lead font-prose">
-              <strong>Resumen IA — {summary ? formatDate(summary.date) : '…'}:</strong>
+              <strong>Briefing del día — {summary ? formatDate(summary.fecha) : '…'}:</strong>
             </p>
+            {!loading && summary?.mercados ? (
+              <div className="briefing-pills">
+                {Object.entries(summary.mercados).map(([k, v]) => (
+                  <span key={k} className={`briefing-pill ${(v.changePct || 0) >= 0 ? 'gain' : 'loss'}`}>
+                    {k}: {(v.changePct || 0) >= 0 ? '+' : ''}
+                    {(v.changePct || 0).toFixed(2)}%
+                  </span>
+                ))}
+              </div>
+            ) : null}
             <p className="ai-bar-text font-prose">
               {loading
                 ? 'Cargando…'
-                : summary?.text ??
+                : summary?.resumen ??
                   'Sin resumen disponible todavía.'}
             </p>
           </div>
@@ -312,7 +361,19 @@ export function Dashboard() {
             {candidates.map((c) => {
               const pos = c.changePct >= 0
               return (
-                <article key={c.ticker} className="cand-card">
+                <article
+                  key={c.ticker}
+                  className="cand-card dash-clickable"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => goToActivo(c.ticker)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      goToActivo(c.ticker)
+                    }
+                  }}
+                >
                   <div className="cand-head">
                     <span className="cand-ticker">{c.ticker}</span>
                     <span className={badgeClass(c.signal)}>{c.signal}</span>
@@ -385,7 +446,19 @@ export function Dashboard() {
                 filteredRows.map((row) => {
                   const pos = row.changePct >= 0
                   return (
-                    <tr key={row.symbol}>
+                    <tr
+                      key={row.symbol}
+                      className="dash-clickable-row"
+                      onClick={() => goToActivo(row.symbol)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          goToActivo(row.symbol)
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                    >
                       <td className="scan-tick">{row.symbol}</td>
                       <td className="scan-name">{row.name}</td>
                       <td>{formatPrice(row.price, row.currency)}</td>

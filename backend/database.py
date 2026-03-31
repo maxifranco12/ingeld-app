@@ -76,6 +76,19 @@ class PasswordReset(Base):
     user = relationship("User", back_populates="password_resets")
 
 
+class AnalysisHistory(Base):
+    __tablename__ = "analysis_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    ticker = Column(String(40), nullable=False, index=True)
+    tipo = Column(String(32), nullable=False)
+    señal = Column(String(16), nullable=True)
+    resumen = Column(Text, nullable=False)
+    score_total = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
 
