@@ -23,6 +23,8 @@ from anthropic import Anthropic
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from routers.market import normalize_ticker
+
 router = APIRouter()
 
 _SCANNER_CACHE: dict[str, Any] = {"data": None, "ts": None}
@@ -107,6 +109,7 @@ def _dario_score(
 
 
 def _analyze_ticker(symbol: str) -> Optional[dict[str, Any]]:
+    symbol = normalize_ticker(symbol)
     ticker = yf.Ticker(symbol)
     hist = ticker.history(period="1y", interval="1d")
     if hist is None or hist.empty or len(hist) < 35:

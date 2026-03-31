@@ -215,6 +215,7 @@ export function Activo() {
   const [data, setData] = useState<AssetPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [assetNotFound, setAssetNotFound] = useState(false)
   const chartRef = useRef<HTMLDivElement>(null)
   const chartApiRef = useRef<ReturnType<typeof createChart> | null>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -242,11 +243,17 @@ export function Activo() {
     if (!symbol) return
     setLoading(true)
     setError(null)
+    setAssetNotFound(false)
     setData(null)
     try {
       const path = `${API}/api/market/asset/${encodeURIComponent(symbol)}?range=${encodeURIComponent(range)}`
       const res = await fetch(path)
       if (!res.ok) {
+        if (res.status === 404) {
+          setAssetNotFound(true)
+          setData(null)
+          return
+        }
         const t = await res.text()
         throw new Error(t || `HTTP ${res.status}`)
       }
@@ -518,7 +525,23 @@ Descripción: ${n.descripcion || ''}`,
         <p className="error-state">Símbolo no válido.</p>
       )}
 
-      {error && <div className="error-state">{error}</div>}
+      {error && !assetNotFound && <div className="error-state">{error}</div>}
+
+      {assetNotFound && symbol && (
+        <div className="error-state activo-not-found font-prose">
+          <p>
+            No encontramos datos para <strong>{symbol}</strong>. Verificá que el
+            símbolo sea correcto.
+          </p>
+          <button
+            type="button"
+            className="activo-not-found-btn"
+            onClick={() => navigate('/buscador')}
+          >
+            Volver al buscador
+          </button>
+        </div>
+      )}
 
       {loading && !data && (
         <p className="page-sub font-prose">Cargando activo…</p>

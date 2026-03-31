@@ -16,6 +16,30 @@ from fastapi import APIRouter, HTTPException, Query
 
 router = APIRouter()
 
+TICKER_MAP: dict[str, str] = {
+    "YPF.BA": "YPFD.BA",
+    "YPFD.BA": "YPFD.BA",
+    "GGAL.BA": "GGAL.BA",
+    "BMA.BA": "BMA.BA",
+    "PAMP.BA": "PAMP.BA",
+    "TXAR.BA": "TXAR.BA",
+    "TECO2.BA": "TECO2.BA",
+    "SUPV.BA": "SUPV.BA",
+    "BBAR.BA": "BBAR.BA",
+    "ALUA.BA": "ALUA.BA",
+    "CRES.BA": "CRES.BA",
+    "EDN.BA": "EDN.BA",
+    "TGNO4.BA": "TGNO4.BA",
+    "VALO.BA": "VALO.BA",
+    "MIRG.BA": "MIRG.BA",
+}
+
+
+def normalize_ticker(symbol: str) -> str:
+    s = symbol.strip().upper()
+    return TICKER_MAP.get(s, s)
+
+
 _CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _QUOTE_TTL_SEC = 120.0
 
@@ -178,7 +202,7 @@ def _quote_one_impl(symbol: str) -> dict[str, Any]:
 
 
 def _quote_one(symbol: str) -> dict[str, Any]:
-    key = symbol.strip()
+    key = normalize_ticker(symbol.strip())
     now = time.time()
     hit = _CACHE.get(key)
     if hit is not None:
@@ -377,13 +401,15 @@ def fundamentals_from_info(info: dict[str, Any]) -> dict[str, Any]:
 
 
 def _asset_payload_impl(symbol: str, chart_range: str) -> dict[str, Any]:
-    sym = symbol.strip()
+    sym = normalize_ticker(symbol.strip())
     cr = _norm_chart_range(chart_range)
     yf_period = _ASSET_PERIOD_MAP[cr]
     ticker = yf.Ticker(sym)
     hist = ticker.history(period=yf_period, interval="1d")
+    if (hist is None or hist.empty) and yf_period != "3mo":
+        hist = ticker.history(period="3mo", interval="1d")
     if hist is None or hist.empty:
-        raise ValueError(f"Sin datos históricos para {sym}")
+        raise ValueError("No hay datos disponibles para este ticker")
     close = hist["Close"].astype(float)
     last = float(close.iloc[-1])
     prev = float(close.iloc[-2]) if len(close) > 1 else last
@@ -509,7 +535,7 @@ def market_asset(
     ),
 ) -> dict[str, Any]:
     chart_r = _norm_chart_range(range_)
-    sym_key = symbol.strip()
+    sym_key = normalize_ticker(symbol.strip())
     cache_key = f"{sym_key.upper()}|{chart_r}"
     now = time.time()
     hit = _ASSET_CACHE.get(cache_key)
@@ -519,8 +545,16 @@ def market_asset(
             return copy.deepcopy(payload)
     try:
         payload = _asset_payload_impl(sym_key, chart_r)
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=str(e).strip() or "No hay datos disponibles para este ticker",
+        ) from e
+    except Exception:
+        raise HTTPException(
+            status_code=404,
+            detail="No hay datos disponibles para este ticker",
+        ) from None
     _ASSET_CACHE[cache_key] = (now, copy.deepcopy(payload))
     return copy.deepcopy(payload)
 
@@ -711,7 +745,8 @@ def history(
     interval: str = Query("1d", description="1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo"),
 ) -> dict[str, Any]:
     """Serie histórica OHLCV para gráficos."""
-    ticker = yf.Ticker(symbol)
+    sym = normalize_ticker(symbol.strip())
+    ticker = yf.Ticker(sym)
     hist = ticker.history(period=period, interval=interval)
     if hist is None or hist.empty:
         raise HTTPException(status_code=404, detail="Sin datos históricos")
@@ -728,4 +763,4 @@ def history(
                 "volume": int(row["Volume"]) if row["Volume"] == row["Volume"] else 0,
             }
         )
-    return {"symbol": symbol, "period": period, "interval": interval, "bars": rows}
+    return {"symbol": sym, "period": period, "interval": interval, "bars": rows}

@@ -17,10 +17,11 @@ from pydantic import BaseModel, Field
 import requests
 import yfinance as yf
 
-from routers.market import fundamentals_from_info
+from routers.market import fundamentals_from_info, normalize_ticker
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
 NEWS_API_KEY = os.getenv("NEWS_API_KEY", "42dd9470a9dc46ed97c814b106ccd257")
+ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_KEY", "")
 
 router = APIRouter()
 
@@ -51,47 +52,177 @@ def _extract_json(text: str) -> dict[str, Any]:
     return json.loads(t)
 
 
-def _news_from_newsapi(company_name: str, ticker: str, api_key: str) -> list[dict[str, Any]]:
+def _tickers_match(sym: str, av_ticker: str) -> bool:
+    """Coincide símbolo pedido con ticker de Alpha Vantage (p. ej. BMA.BA vs BMA)."""
+    a = (sym or "").strip().upper()
+    b = (av_ticker or "").strip().upper()
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    a_base = re.sub(r"\.BA$", "", a)
+    b_base = re.sub(r"\.BA$", "", b)
+    if a_base == b_base and (a_base or b_base):
+        return True
+    return False
+
+
+def _av_time_published_to_iso(s: str) -> str:
+    """Alpha Vantage: '20240330T123456' -> ISO 8601."""
+    raw = (s or "").strip()
+    if len(raw) >= 15 and "T" in raw:
+        try:
+            dt = datetime.strptime(raw[:15], "%Y%m%dT%H%M%S")
+            return dt.replace(tzinfo=timezone.utc).isoformat()
+        except ValueError:
+            pass
+    return raw
+
+
+def _news_from_alphavantage(ticker: str, api_key: str) -> list[dict[str, Any]]:
+    """NEWS_SENTIMENT como fuente principal; filtra por relevance_score > 0.3 para el ticker."""
+    sym = (ticker or "").strip()
+    if not sym or not api_key.strip():
+        return []
+
+    url = "https://www.alphavantage.co/query"
+    params: dict[str, Any] = {
+        "function": "NEWS_SENTIMENT",
+        "tickers": sym,
+        "limit": 10,
+        "sort": "LATEST",
+        "apikey": api_key.strip(),
+    }
+    try:
+        print(f"Alpha Vantage NEWS_SENTIMENT: tickers={sym}", file=sys.stderr)
+        res = requests.get(url, params=params, timeout=20)
+        res.raise_for_status()
+        data = res.json()
+    except Exception as e:
+        print(f"Alpha Vantage error: {e!s}", file=sys.stderr)
+        return []
+
+    if not isinstance(data, dict):
+        return []
+    if data.get("Note") or data.get("Information"):
+        print(
+            f"Alpha Vantage aviso: {data.get('Note') or data.get('Information')}",
+            file=sys.stderr,
+        )
+        return []
+
+    feed = data.get("feed")
+    if not isinstance(feed, list):
+        return []
+
+    out: list[dict[str, Any]] = []
+    for article in feed:
+        if not isinstance(article, dict):
+            continue
+        ts_list = article.get("ticker_sentiment")
+        if not isinstance(ts_list, list):
+            continue
+        relevant = False
+        for ts in ts_list:
+            if not isinstance(ts, dict):
+                continue
+            t_sym = str(ts.get("ticker") or "").strip()
+            try:
+                rel = float(ts.get("relevance_score") or 0.0)
+            except (TypeError, ValueError):
+                rel = 0.0
+            if rel <= 0.3:
+                continue
+            if _tickers_match(sym, t_sym):
+                relevant = True
+                break
+        if not relevant:
+            continue
+
+        title = str(article.get("title") or "").strip()
+        link = str(article.get("url") or "").strip()
+        if not title or not link:
+            continue
+
+        src = str(article.get("source") or "").strip()
+        summary = str(article.get("summary") or "").strip()
+        tp = str(article.get("time_published") or "").strip()
+
+        out.append(
+            {
+                "titulo": title,
+                "fecha": _av_time_published_to_iso(tp),
+                "url": link,
+                "fuente": src or "—",
+                "descripcion": summary,
+            }
+        )
+        if len(out) >= 10:
+            break
+
+    print(f"Alpha Vantage: {len(out)} noticias tras filtro de relevancia", file=sys.stderr)
+    return out
+
+
+def _shortname_to_argentina_query(short_name: str) -> str:
+    """Ej.: 'BANCO MACRO S.A.' -> 'Banco Macro Argentina'."""
+    if not short_name or not str(short_name).strip():
+        return ""
+    s = str(short_name).strip()
+    s = re.sub(
+        r"\s*,?\s*("
+        r"S\.?\s*A\.?|S\.A\.U\.C\.|S\.A\.I\.C\.|S\.C\.A\.|"
+        r"SOCIEDAD\s+AN[OÓ]NIMA|SOCIEDAD\s+ANONIMA|"
+        r"Y\s+C\.|INC\.?|CORP\.?|LIMITADA|LTD\.?)\s*\.?\s*$",
+        "",
+        s,
+        flags=re.I,
+    )
+    s = re.sub(r"\s+", " ", s).strip(" ,.")
+    if not s:
+        return ""
+    words = s.split()
+    titled = " ".join(w[:1].upper() + w[1:].lower() if w.isupper() else w for w in words)
+    return f"{titled} Argentina"
+
+
+def _newsapi_fetch_articles(
+    api_key: str,
+    q: str,
+    *,
+    language: str,
+    sort_by: str = "publishedAt",
+    page_size: int = 15,
+) -> list[dict[str, Any]]:
     url = "https://newsapi.org/v2/everything"
     from_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
-    q1 = f"{company_name} OR {ticker}".strip()
-    primary: dict[str, Any] = {
-        "q": q1,
-        "language": "en",
-        "sortBy": "publishedAt",
-        "pageSize": 15,
+    params: dict[str, Any] = {
+        "q": q.strip(),
+        "language": language,
+        "sortBy": sort_by,
+        "pageSize": page_size,
         "from": from_date,
         "apiKey": api_key,
     }
-    fallback: dict[str, Any] = {
-        "q": ticker,
-        "language": "en",
-        "sortBy": "relevancy",
-        "pageSize": 10,
-        "apiKey": api_key,
-    }
+    try:
+        print(
+            f"NewsAPI búsqueda [{language}]: {params.get('q', '')}",
+            file=sys.stderr,
+        )
+        res = requests.get(url, params=params, timeout=12)
+        res.raise_for_status()
+        j = res.json()
+        articles = j.get("articles") or []
+        print(f"NewsAPI resultado: {len(articles)} artículos", file=sys.stderr)
+        return [a for a in articles if isinstance(a, dict)]
+    except Exception:
+        print("NewsAPI resultado: 0 artículos", file=sys.stderr)
+        return []
 
-    def _call(params: dict[str, Any]) -> list[dict[str, Any]]:
-        try:
-            print(f"NewsAPI búsqueda: {params.get('q', '')}", file=sys.stderr)
-            res = requests.get(url, params=params, timeout=12)
-            res.raise_for_status()
-            j = res.json()
-            articles = j.get("articles") or []
-            print(f"NewsAPI resultado: {len(articles)} artículos", file=sys.stderr)
-            return articles
-        except Exception:
-            print("NewsAPI resultado: 0 artículos", file=sys.stderr)
-            return []
 
-    raw = _call(primary)
-    if not raw:
-        raw = _call(fallback)
-
+def _articles_to_rows(articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
-    for n in raw[:10]:
-        if not isinstance(n, dict):
-            continue
+    for n in articles:
         title = str(n.get("title") or "").strip()
         link = str(n.get("url") or "").strip()
         source = n.get("source") if isinstance(n.get("source"), dict) else {}
@@ -107,33 +238,108 @@ def _news_from_newsapi(company_name: str, ticker: str, api_key: str) -> list[dic
                 "descripcion": desc,
             }
         )
-    dedup: list[dict[str, Any]] = []
+    return out
+
+
+def _merge_dedupe_rows(
+    batches: list[list[dict[str, Any]]],
+    *,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
     seen: set[str] = set()
-    for row in out:
-        k = (row.get("url") or "").strip().lower()
-        if not k or k in seen:
-            continue
-        seen.add(k)
-        if row.get("titulo"):
-            dedup.append(row)
+    dedup: list[dict[str, Any]] = []
+    for batch in batches:
+        for row in batch:
+            k = (row.get("url") or "").strip().lower()
+            if not k or k in seen:
+                continue
+            seen.add(k)
+            if row.get("titulo"):
+                dedup.append(row)
+            if len(dedup) >= limit:
+                return dedup
     return dedup
+
+
+def _news_from_newsapi(
+    company_name: str,
+    ticker: str,
+    api_key: str,
+    *,
+    short_name: str = "",
+) -> list[dict[str, Any]]:
+    sym = (ticker or "").strip()
+    is_ba = sym.upper().endswith(".BA")
+
+    batches: list[list[dict[str, Any]]] = []
+
+    q_primary = f"{company_name} OR {sym}".strip()
+    en_main = _newsapi_fetch_articles(api_key, q_primary, language="en")
+    batches.append(_articles_to_rows(en_main))
+
+    if is_ba:
+        es_q = _shortname_to_argentina_query(short_name)
+        if es_q:
+            es_articles = _newsapi_fetch_articles(
+                api_key,
+                f"{es_q} OR {sym}",
+                language="es",
+            )
+            batches.append(_articles_to_rows(es_articles))
+
+    merged = _merge_dedupe_rows(batches, limit=10)
+    if merged:
+        return merged
+
+    fb_ticker = _newsapi_fetch_articles(
+        api_key,
+        sym,
+        language="en",
+        sort_by="relevancy",
+        page_size=10,
+    )
+    merged = _merge_dedupe_rows([_articles_to_rows(fb_ticker)], limit=10)
+    if merged:
+        return merged
+
+    if is_ba:
+        base = re.sub(r"\.BA$", "", sym, flags=re.I).strip()
+        q_ar = f"{base} Argentina"
+        for lang in ("es", "en"):
+            extra = _newsapi_fetch_articles(api_key, q_ar, language=lang)
+            rows = _articles_to_rows(extra)
+            merged = _merge_dedupe_rows([rows], limit=10)
+            if merged:
+                return merged
+
+    return []
 
 
 @router.get("/{ticker:path}", response_model=NewsResponse)
 def news_monitor(ticker: str) -> NewsResponse:
-    sym = (ticker or "").strip()
+    sym = normalize_ticker((ticker or "").strip())
     if not sym:
         raise HTTPException(status_code=400, detail="ticker requerido")
 
     yft = yf.Ticker(sym)
     info = yft.info or {}
     fundamentals = fundamentals_from_info(info)
+    av_key = (ALPHA_VANTAGE_KEY or "").strip()
     news_key = (NEWS_API_KEY or "").strip()
-    if not news_key:
-        raise HTTPException(status_code=503, detail="NEWS_API_KEY no configurada en .env")
+    if not av_key and not news_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Configurá ALPHA_VANTAGE_KEY y/o NEWS_API_KEY en .env",
+        )
 
     company_name = str(info.get("shortName") or info.get("longName") or sym).strip() or sym
-    raw_items = _news_from_newsapi(company_name, sym, news_key)
+    nombre_corto = str(info.get("shortName") or "").strip()
+
+    raw_items: list[dict[str, Any]] = []
+    if av_key:
+        raw_items = _news_from_alphavantage(sym, av_key)
+    if not raw_items and news_key:
+        raw_items = _news_from_newsapi(company_name, sym, news_key, short_name=nombre_corto)
 
     if not raw_items:
         return NewsResponse(

@@ -704,6 +704,30 @@ button {
   color: var(--loss);
 }
 
+.activo-not-found p {
+  margin: 0 0 1rem;
+  max-width: 28rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.activo-not-found-btn {
+  margin-top: 0.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.activo-not-found-btn:hover {
+  border-color: rgba(0, 168, 122, 0.45);
+}
+
 .skeleton-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
