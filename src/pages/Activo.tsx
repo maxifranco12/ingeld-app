@@ -10,6 +10,20 @@ import {
   CandlestickSeries,
   type UTCTimestamp,
 } from 'lightweight-charts'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ComposedChart,
+  Legend,
+  Line,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { exportActivoPdf } from '../lib/exportActivoPdf'
@@ -129,6 +143,30 @@ type NewsPayload = {
   razon_oportunidad: string
 }
 
+type FinancialsPayload = {
+  años: number[]
+  income: {
+    revenue: Array<number | null>
+    operating_income: Array<number | null>
+    net_income: Array<number | null>
+  }
+  cashflow: {
+    operating_cashflow: Array<number | null>
+    free_cashflow: Array<number | null>
+    net_income: Array<number | null>
+  }
+  valuacion_modelos: {
+    dcf_20y?: number | null
+    dfcf_20y?: number | null
+    dni_20y?: number | null
+    dfcf_terminal?: number | null
+    mean_ps?: number | null
+    mean_pe?: number | null
+    mean_pb?: number | null
+    precio_actual?: number | null
+  }
+}
+
 const RANGES: ChartRange[] = ['1M', '3M', '6M', '1Y']
 
 const GAIN = '#0a7c52'
@@ -153,6 +191,15 @@ function señalIcon(s: string | undefined): string {
 function clampScore(n: number | undefined, fallback = 5): number {
   if (n == null || !Number.isFinite(n)) return fallback
   return Math.min(10, Math.max(1, Math.round(n)))
+}
+
+function fmtBig(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return '—'
+  const abs = Math.abs(n)
+  if (abs >= 1e12) return `${(n / 1e12).toFixed(1)}T`
+  if (abs >= 1e9) return `${(n / 1e9).toFixed(1)}B`
+  if (abs >= 1e6) return `${(n / 1e6).toFixed(1)}M`
+  return n.toLocaleString('es-AR', { maximumFractionDigits: 0 })
 }
 
 function rsiZone(rsi: number | null): 'oversold' | 'overbought' | 'neutral' {
@@ -269,6 +316,9 @@ export function Activo() {
   const [newsData, setNewsData] = useState<NewsPayload | null>(null)
   const [newsLoading, setNewsLoading] = useState(false)
   const [newsErr, setNewsErr] = useState<string | null>(null)
+  const [financials, setFinancials] = useState<FinancialsPayload | null>(null)
+  const [financialsLoading, setFinancialsLoading] = useState(false)
+  const [financialsErr, setFinancialsErr] = useState<string | null>(null)
 
   const [aboutTextEs, setAboutTextEs] = useState<string | null>(null)
   const [aboutShowEs, setAboutShowEs] = useState(false)
@@ -337,6 +387,36 @@ export function Activo() {
       })
       .finally(() => {
         if (!cancelled) setNewsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [data?.symbol])
+
+  useEffect(() => {
+    if (!data?.symbol) return
+    let cancelled = false
+    setFinancialsLoading(true)
+    setFinancialsErr(null)
+    setFinancials(null)
+    void fetch(`${API}/api/market/financials/${encodeURIComponent(data.symbol)}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const t = await res.text()
+          throw new Error(t || `HTTP ${res.status}`)
+        }
+        return (await res.json()) as FinancialsPayload
+      })
+      .then((j) => {
+        if (!cancelled) setFinancials(j)
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setFinancialsErr(e instanceof Error ? e.message : 'No disponible')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setFinancialsLoading(false)
       })
     return () => {
       cancelled = true
@@ -635,6 +715,41 @@ Descripción: ${n.descripcion || ''}`,
         ? 'valuation-badge--sobre'
         : 'valuation-badge--justa'
 
+  const incomeTrend = financials?.años?.map((y, i) => ({
+    año: String(y),
+    revenue: financials.income.revenue[i] ?? null,
+    operating_income: financials.income.operating_income[i] ?? null,
+    net_income: financials.income.net_income[i] ?? null,
+  })) ?? []
+
+  const cashflowTrend = financials?.años?.map((y, i) => ({
+    año: String(y),
+    operating_cashflow: financials.cashflow.operating_cashflow[i] ?? null,
+    free_cashflow: financials.cashflow.free_cashflow[i] ?? null,
+    net_income: financials.cashflow.net_income[i] ?? null,
+  })) ?? []
+
+  const valuationBars = financials
+    ? [
+        { modelo: 'DCF 20y', valor: financials.valuacion_modelos.dcf_20y ?? null },
+        { modelo: 'DFCF 20y', valor: financials.valuacion_modelos.dfcf_20y ?? null },
+        { modelo: 'DNI 20y', valor: financials.valuacion_modelos.dni_20y ?? null },
+        { modelo: 'DFCF terminal', valor: financials.valuacion_modelos.dfcf_terminal ?? null },
+        { modelo: 'Mean P/S', valor: financials.valuacion_modelos.mean_ps ?? null },
+        { modelo: 'Mean P/E', valor: financials.valuacion_modelos.mean_pe ?? null },
+        { modelo: 'Mean P/B', valor: financials.valuacion_modelos.mean_pb ?? null },
+      ].filter((x) => x.valor != null && Number.isFinite(x.valor))
+    : []
+
+  const valuationNow = financials?.valuacion_modelos?.precio_actual ?? data?.price ?? null
+
+  const valuationColor = (v: number) => {
+    if (valuationNow == null || !Number.isFinite(valuationNow)) return '#b0b4ba'
+    if (v > valuationNow * 1.3) return '#0a7c52'
+    if (v >= valuationNow * 0.9) return '#b07a10'
+    return '#c0293e'
+  }
+
   return (
     <div className="activo-page">
       <button type="button" className="activo-back-alt font-prose" onClick={() => navigate(-1)}>
@@ -838,6 +953,103 @@ Descripción: ${n.descripcion || ''}`,
                 </p>
               </article>
             </div>
+          </section>
+
+          <section className="financials-section" aria-labelledby="fin-h">
+            <h2 id="fin-h" className="dash-zone-title">Tendencias financieras</h2>
+            {financialsLoading ? (
+              <div className="financials-chart-grid">
+                <div className="chart-container"><div className="skeleton-card" style={{ height: 280 }} /></div>
+                <div className="chart-container"><div className="skeleton-card" style={{ height: 280 }} /></div>
+              </div>
+            ) : null}
+            {financialsErr && !financialsLoading ? (
+              <p className="page-sub font-prose">Datos financieros no disponibles</p>
+            ) : null}
+            {!financialsLoading && financials && (
+              <>
+                <div className="financials-chart-grid">
+                  <div className="chart-container">
+                    <h3 className="chart-title">Ingresos y rentabilidad</h3>
+                    <p className="chart-subtitle font-prose">Anual</p>
+                    <ResponsiveContainer width="100%" height={280}>
+                      <ComposedChart data={incomeTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.08)" />
+                        <XAxis dataKey="año" />
+                        <YAxis tickFormatter={(v) => fmtBig(v)} />
+                        <Tooltip
+                          formatter={(v) => fmtBig(Number(v))}
+                          contentStyle={{
+                            borderRadius: 8,
+                            border: '1px solid rgba(0,0,0,0.1)',
+                            background: '#faf9f7',
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="revenue" name="Revenue" fill="#3b82f6" />
+                        <Bar dataKey="operating_income" name="Operating Income" fill="#f59e0b" />
+                        <Bar dataKey="net_income" name="Net Income" fill="#10b981" />
+                        <Line type="monotone" dataKey="net_income" name="Tendencia NI" stroke="#047857" strokeWidth={2} dot={false} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="chart-container">
+                    <h3 className="chart-title">Flujo de caja</h3>
+                    <p className="chart-subtitle font-prose">Anual</p>
+                    <ResponsiveContainer width="100%" height={280}>
+                      <ComposedChart data={cashflowTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.08)" />
+                        <XAxis dataKey="año" />
+                        <YAxis tickFormatter={(v) => fmtBig(v)} />
+                        <Tooltip
+                          formatter={(v) => fmtBig(Number(v))}
+                          contentStyle={{
+                            borderRadius: 8,
+                            border: '1px solid rgba(0,0,0,0.1)',
+                            background: '#faf9f7',
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="operating_cashflow" name="Operating CF" fill="#10b981" />
+                        <Bar dataKey="free_cashflow" name="FCF" fill="#047857" />
+                        <Bar dataKey="net_income" name="Net Income" fill="#f59e0b" />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+                <div className="chart-container valuation-chart">
+                  <h3 className="chart-title">¿A qué precio vale la empresa?</h3>
+                  <p className="chart-subtitle font-prose">Comparación de modelos de valuación vs precio actual</p>
+                  {valuationBars.length ? (
+                    <ResponsiveContainer width="100%" height={340}>
+                      <BarChart data={valuationBars} layout="vertical" margin={{ left: 24, right: 24 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.08)" />
+                        <XAxis type="number" tickFormatter={(v) => fmtBig(v)} />
+                        <YAxis type="category" dataKey="modelo" width={110} />
+                        {valuationNow != null && Number.isFinite(valuationNow) ? (
+                          <ReferenceLine x={valuationNow} stroke="#111827" strokeDasharray="4 3" />
+                        ) : null}
+                        <Tooltip
+                          formatter={(v) => fmtBig(Number(v))}
+                          contentStyle={{
+                            borderRadius: 8,
+                            border: '1px solid rgba(0,0,0,0.1)',
+                            background: '#faf9f7',
+                          }}
+                        />
+                        <Bar dataKey="valor" name="Valor modelo">
+                          {valuationBars.map((entry) => (
+                            <Cell key={entry.modelo} fill={valuationColor(Number(entry.valor))} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <p className="page-sub font-prose">Datos financieros no disponibles</p>
+                  )}
+                </div>
+              </>
+            )}
           </section>
 
           {f && (

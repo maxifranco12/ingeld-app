@@ -72,6 +72,8 @@ CANDIDATE_SYMBOLS = ["GGAL.BA", "SPY", "AL30.BA"]
 USD_FALLBACKS = ["ARS=X", "USDARS=X"]
 _AI_SUMMARY_CACHE: dict[str, Any] = {"ts": 0.0, "payload": None}
 _AI_SUMMARY_TTL_SEC = 1800.0
+_FINANCIALS_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_FINANCIALS_TTL_SEC = 3600.0
 
 
 def _rsi(close: pd.Series, period: int = 14) -> Optional[float]:
@@ -369,6 +371,67 @@ def _scalar_json(v: Any) -> Any:
         return x
     except (TypeError, ValueError, OverflowError):
         return str(v) if v is not None else None
+
+
+def _pick_ts_row(df: pd.DataFrame, candidates: list[str]) -> pd.Series | None:
+    if df is None or df.empty:
+        return None
+    idx_map = {str(i).lower().replace(" ", "_"): i for i in df.index}
+    for c in candidates:
+        k = c.lower().replace(" ", "_")
+        if k in idx_map:
+            return df.loc[idx_map[k]]
+    return None
+
+
+def _series_to_year_values(s: pd.Series | None, years: list[int]) -> list[float | None]:
+    if s is None:
+        return [None for _ in years]
+    out: list[float | None] = []
+    for y in years:
+        val = None
+        for c in s.index:
+            try:
+                ts = pd.Timestamp(c)
+                if ts.year == y:
+                    val = _safe_float(s[c])
+                    break
+            except Exception:
+                continue
+        out.append(val)
+    return out
+
+
+def _safe_float(x: Any) -> float | None:
+    try:
+        v = float(x)
+        if math.isnan(v) or math.isinf(v):
+            return None
+        return v
+    except Exception:
+        return None
+
+
+def _calc_dcf_20y(
+    fcf: float | None,
+    growth: float,
+    discount: float = 0.10,
+    terminal_growth: float = 0.03,
+) -> float | None:
+    if fcf is None or fcf <= 0:
+        return None
+    g = max(-0.1, min(0.25, growth))
+    pv = 0.0
+    for t in range(1, 21):
+        cf = fcf * (1 + g) ** t
+        pv += cf / (1 + discount) ** t
+    cf20 = fcf * (1 + g) ** 20
+    denom = discount - terminal_growth
+    if denom <= 0:
+        return pv
+    tv = (cf20 * (1 + terminal_growth)) / denom
+    pv += tv / (1 + discount) ** 20
+    return pv
 
 
 def fundamentals_from_info(info: dict[str, Any]) -> dict[str, Any]:
@@ -784,6 +847,125 @@ def market_candidates() -> dict[str, Any]:
                 }
             )
     return {"items": out}
+
+
+@router.get("/financials/{symbol:path}")
+def market_financials(symbol: str) -> dict[str, Any]:
+    sym = normalize_ticker(symbol.strip())
+    if not sym:
+        raise HTTPException(status_code=400, detail="ticker requerido")
+    now = time.time()
+    hit = _FINANCIALS_CACHE.get(sym.upper())
+    if hit and now - hit[0] < _FINANCIALS_TTL_SEC:
+        return copy.deepcopy(hit[1])
+
+    t = yf.Ticker(sym)
+    fin = t.financials
+    cf = t.cashflow
+    bs = t.balance_sheet
+    info = t.info or {}
+    hist_px = t.history(period="5y", interval="1d")
+
+    cols: list[pd.Timestamp] = []
+    for df in (fin, cf, bs):
+        if df is None or df.empty:
+            continue
+        for c in df.columns:
+            try:
+                cols.append(pd.Timestamp(c))
+            except Exception:
+                continue
+    years = sorted({c.year for c in cols})[-5:]
+    if not years:
+        y = date.today().year
+        years = [y - 4, y - 3, y - 2, y - 1, y]
+
+    revenue_s = _pick_ts_row(fin, ["Total Revenue", "Revenue"])
+    op_income_s = _pick_ts_row(fin, ["Operating Income"])
+    net_income_s = _pick_ts_row(fin, ["Net Income"])
+    op_cf_s = _pick_ts_row(cf, ["Operating Cash Flow", "Total Cash From Operating Activities"])
+    fcf_s = _pick_ts_row(cf, ["Free Cash Flow"])
+    bs_equity_s = _pick_ts_row(bs, ["Stockholders Equity", "Total Stockholder Equity"])
+
+    rev_vals = _series_to_year_values(revenue_s, years)
+    op_inc_vals = _series_to_year_values(op_income_s, years)
+    net_inc_vals = _series_to_year_values(net_income_s, years)
+    op_cf_vals = _series_to_year_values(op_cf_s, years)
+    fcf_vals = _series_to_year_values(fcf_s, years)
+
+    pe = _safe_float(info.get("trailingPE"))
+    pb = _safe_float(info.get("priceToBook"))
+    ps = _safe_float(info.get("priceToSalesTrailing12Months"))
+    eps = _safe_float(info.get("trailingEps"))
+    market_cap = _safe_float(info.get("marketCap"))
+    shares = _safe_float(info.get("sharesOutstanding"))
+    price_now = _safe_float(info.get("currentPrice")) or _safe_float(info.get("regularMarketPrice"))
+    if price_now is None and hist_px is not None and not hist_px.empty:
+        price_now = _safe_float(hist_px["Close"].iloc[-1])
+
+    if shares is None and market_cap is not None and price_now and price_now > 0:
+        shares = market_cap / price_now
+
+    # promedios simples 5y de múltiplos (si no hay histórico anual de múltiplos, usamos actual como proxy)
+    mean_pe = pe
+    mean_pb = pb
+    mean_ps = ps
+
+    book_value_ps = None
+    if bs_equity_s is not None:
+        latest_eq = _safe_float(bs_equity_s.iloc[0])
+        if latest_eq is not None and shares and shares > 0:
+            book_value_ps = latest_eq / shares
+
+    rev_ps = None
+    if rev_vals and rev_vals[-1] is not None and shares and shares > 0:
+        rev_ps = rev_vals[-1] / shares
+
+    val_mean_pe = (mean_pe * eps) if (mean_pe is not None and eps is not None) else None
+    val_mean_pb = (
+        (mean_pb * book_value_ps)
+        if (mean_pb is not None and book_value_ps is not None)
+        else None
+    )
+    val_mean_ps = (
+        (mean_ps * rev_ps)
+        if (mean_ps is not None and rev_ps is not None)
+        else None
+    )
+
+    fcf_latest = fcf_vals[-1] if fcf_vals else None
+    rev_growth = _safe_float(info.get("revenueGrowth")) or 0.10
+    dcf_ev_20 = _calc_dcf_20y(fcf_latest, rev_growth)
+    dcf_terminal = _calc_dcf_20y(fcf_latest, rev_growth, terminal_growth=0.03)
+
+    to_per_share = (
+        lambda v: (v / shares) if (v is not None and shares and shares > 0) else None
+    )
+    payload = {
+        "años": years,
+        "income": {
+            "revenue": rev_vals,
+            "operating_income": op_inc_vals,
+            "net_income": net_inc_vals,
+        },
+        "cashflow": {
+            "operating_cashflow": op_cf_vals,
+            "free_cashflow": fcf_vals,
+            "net_income": net_inc_vals,
+        },
+        "valuacion_modelos": {
+            "dcf_20y": to_per_share(dcf_ev_20),
+            "dfcf_20y": to_per_share(dcf_ev_20),
+            "dni_20y": to_per_share(dcf_ev_20),
+            "dfcf_terminal": to_per_share(dcf_terminal),
+            "mean_ps": val_mean_ps,
+            "mean_pe": val_mean_pe,
+            "mean_pb": val_mean_pb,
+            "precio_actual": price_now,
+        },
+    }
+    _FINANCIALS_CACHE[sym.upper()] = (now, copy.deepcopy(payload))
+    return payload
 
 
 @router.get("/quote/{symbol:path}")
