@@ -4107,3 +4107,42 @@ button {
 .activo-catalizadores {
   margin-bottom: 1rem;
 }
+
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--gain);
+  opacity: 0.9;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gain);
+  animation: live-pulse 1.4s ease-in-out infinite;
+}
+
+.live-indicator.is-updated .live-dot {
+  animation: live-pulse 0.55s ease-in-out 2;
+}
+
+@keyframes live-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(10, 124, 82, 0.45);
+  }
+  70% {
+    transform: scale(1.12);
+    box-shadow: 0 0 0 8px rgba(10, 124, 82, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(10, 124, 82, 0);
+  }
+}

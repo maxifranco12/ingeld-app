@@ -271,6 +271,8 @@ export function Activo() {
   const [aboutTextEs, setAboutTextEs] = useState<string | null>(null)
   const [aboutShowEs, setAboutShowEs] = useState(false)
   const [aboutTranslating, setAboutTranslating] = useState(false)
+  const [livePulse, setLivePulse] = useState(false)
+  const livePulseTimeoutRef = useRef<number | null>(null)
 
   const [newsTranslations, setNewsTranslations] = useState<
     Record<number, { titulo: string; descripcion: string }>
@@ -342,6 +344,56 @@ export function Activo() {
   useEffect(() => {
     setFundIa(null)
     setFundIaErr(null)
+  }, [data?.symbol])
+
+  useEffect(() => {
+    if (!data?.symbol) return
+
+    const poll = async () => {
+      if (document.hidden) return
+      try {
+        const res = await fetch(
+          `${API}/api/market/quotes?symbols=${encodeURIComponent(data.symbol)}`,
+        )
+        if (!res.ok) return
+        const j = (await res.json()) as {
+          quotes?: Array<{ symbol: string; price: number; changePct: number }>
+        }
+        const q = (j.quotes || [])[0]
+        if (!q || !Number.isFinite(q.price) || !Number.isFinite(q.changePct)) return
+        setData((prev) =>
+          prev
+            ? {
+                ...prev,
+                price: q.price,
+                changePct: q.changePct,
+              }
+            : prev,
+        )
+        setLivePulse(true)
+        if (livePulseTimeoutRef.current != null) {
+          window.clearTimeout(livePulseTimeoutRef.current)
+        }
+        livePulseTimeoutRef.current = window.setTimeout(() => {
+          setLivePulse(false)
+        }, 900)
+      } catch {
+        /* noop */
+      }
+    }
+
+    const id = window.setInterval(() => {
+      void poll()
+    }, 15000)
+
+    return () => {
+      window.clearInterval(id)
+      if (livePulseTimeoutRef.current != null) {
+        window.clearTimeout(livePulseTimeoutRef.current)
+        livePulseTimeoutRef.current = null
+      }
+      setLivePulse(false)
+    }
   }, [data?.symbol])
 
   useEffect(() => {
@@ -626,6 +678,10 @@ Descripción: ${n.descripcion || ''}`,
                     maximumFractionDigits: 6,
                   })}{' '}
                   {data.info.moneda}
+                </span>
+                <span className={`live-indicator ${livePulse ? 'is-updated' : ''}`}>
+                  <span className="live-dot" aria-hidden />
+                  EN VIVO
                 </span>
                 <span className={`activo-var ${pos ? 'gain' : 'loss'}`}>
                   {pos ? '+' : ''}
