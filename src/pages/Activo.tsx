@@ -848,6 +848,8 @@ Descripción: ${n.descripcion || ''}`,
                     precioVsMa50: data.precio_vs_ma50,
                     fundamentals: data.fundamentals ?? null,
                     fundamentalIa: fundIa ?? null,
+                    financialsData: financials ?? null,
+                    newsData: newsData ?? null,
                   })
                 }
               >

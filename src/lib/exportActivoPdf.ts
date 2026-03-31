@@ -17,10 +17,43 @@ type FundamentalIa = {
   señal?: string
   accion_concreta?: string
   horizonte?: string
+  precio_entrada_sugerido?: number | null
+  precio_objetivo?: number | null
+  stop_loss_sugerido?: number | null
   fortalezas: string[]
   riesgos: string[]
   catalizadores?: string[]
   resumen: string
+  modelos_valuacion?: {
+    dcf?: { valor_intrinseco?: number | null } | null
+    relative_multiples?: {
+      valor_modelo_pe?: number | null
+      valor_modelo_pb?: number | null
+      valor_modelo_ps?: number | null
+    } | null
+  } | null
+}
+
+type FinancialsData = {
+  años: number[]
+  income: {
+    revenue: Array<number | null>
+    operating_income: Array<number | null>
+    net_income: Array<number | null>
+  }
+  cashflow: {
+    operating_cashflow: Array<number | null>
+    free_cashflow: Array<number | null>
+    net_income: Array<number | null>
+  }
+}
+
+type NewsItem = {
+  titulo: string
+  fecha: string
+  fuente?: string
+  impacto?: string
+  analisis?: string
 }
 
 type ExportActivoPdfInput = {
@@ -55,6 +88,8 @@ type ExportActivoPdfInput = {
     description?: string | null
   } | null
   fundamentalIa?: FundamentalIa | null
+  financialsData?: FinancialsData | null
+  newsData?: { noticias: NewsItem[] } | null
 }
 
 function fmtNum(n: number | null | undefined, max = 4): string {
@@ -74,6 +109,30 @@ function fmtCap(n: number | null | undefined): string {
   if (abs >= 1e9) return `${(n / 1e9).toFixed(2)} mil M`
   if (abs >= 1e6) return `${(n / 1e6).toFixed(2)} M`
   return fmtNum(n, 0)
+}
+
+function fmtBig(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return '—'
+  const abs = Math.abs(n)
+  if (abs >= 1e12) return `${(n / 1e12).toFixed(1)}T`
+  if (abs >= 1e9) return `${(n / 1e9).toFixed(1)}B`
+  if (abs >= 1e6) return `${(n / 1e6).toFixed(1)}M`
+  return fmtNum(n, 0)
+}
+
+function upsidePct(target: number | null | undefined, price: number): number | null {
+  if (target == null || !Number.isFinite(target) || !Number.isFinite(price) || price <= 0)
+    return null
+  return ((target - price) / price) * 100
+}
+
+function valSemaforo(target: number | null | undefined, price: number): 'BARATA' | 'JUSTA' | 'CARA' {
+  if (target == null || !Number.isFinite(target) || !Number.isFinite(price) || price <= 0) {
+    return 'JUSTA'
+  }
+  if (target > price * 1.3) return 'BARATA'
+  if (target < price * 0.9) return 'CARA'
+  return 'JUSTA'
 }
 
 export function exportActivoPdf(data: ExportActivoPdfInput) {
@@ -105,6 +164,10 @@ export function exportActivoPdf(data: ExportActivoPdfInput) {
       doc.addPage()
       y = MARGIN_MM
     }
+    if (y > pageH - MARGIN_MM) {
+      doc.addPage()
+      y = MARGIN_MM
+    }
   }
   const section = (title: string) => {
     ensure(12)
@@ -128,6 +191,16 @@ export function exportActivoPdf(data: ExportActivoPdfInput) {
   const paragraph = (text: string) => {
     const lines = doc.splitTextToSize(text, contentW)
     for (const ln of lines) line(String(ln))
+  }
+  const subtitle = (text: string) => {
+    ensure(LINE_MM + 1)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.setTextColor(68, 68, 68)
+    doc.text(text, MARGIN_MM, y)
+    y += LINE_MM
+    doc.setFont('courier', 'normal')
+    doc.setTextColor(26, 28, 32)
   }
 
   doc.setFont('courier', 'bold')
@@ -183,6 +256,24 @@ export function exportActivoPdf(data: ExportActivoPdfInput) {
   )
   y += 3
 
+  if (data.financialsData?.años?.length) {
+    section('Tendencias Financieras')
+    const years = data.financialsData.años
+    const row = (label: string, vals: Array<number | null | undefined>) => {
+      const cells = vals.map((v) => fmtBig(v)).join(' | ')
+      line(`${label}: ${cells}`)
+    }
+    subtitle(`Income Statement (${years.join(' | ')})`)
+    row('Revenue', data.financialsData.income.revenue)
+    row('Operating Income', data.financialsData.income.operating_income)
+    row('Net Income', data.financialsData.income.net_income)
+    y += 1
+    subtitle(`Cash Flow (${years.join(' | ')})`)
+    row('Operating CF', data.financialsData.cashflow.operating_cashflow)
+    row('FCF', data.financialsData.cashflow.free_cashflow)
+    y += 2
+  }
+
   const f = data.fundamentals
   if (f) {
     section('Análisis Fundamental')
@@ -233,38 +324,73 @@ export function exportActivoPdf(data: ExportActivoPdfInput) {
     doc.addPage()
     y = MARGIN_MM
     section('Análisis IA Fundamental')
+    line(`Señal: ${data.fundamentalIa.señal || '—'}`)
     line(`Valuación: ${data.fundamentalIa.valuacion}`)
-    line(`Confianza: ${data.fundamentalIa.confianza} · Score salud: ${data.fundamentalIa.score_salud}/10`)
+    line(
+      `Confianza: ${data.fundamentalIa.confianza} · Score salud: ${data.fundamentalIa.score_salud}/10`,
+    )
+    line(
+      `Scores: Técnico ${fmtNum(data.fundamentalIa.score_tecnico, 0)}/10 · Fundamental ${fmtNum(data.fundamentalIa.score_fundamental, 0)}/10 · Noticias ${fmtNum(data.fundamentalIa.score_noticias, 0)}/10 · Total ${fmtNum(data.fundamentalIa.score_total, 0)}/10`,
+    )
+    line(
+      `Niveles: Entrada ${fmtNum(data.fundamentalIa.precio_entrada_sugerido, 4)} · Objetivo ${fmtNum(data.fundamentalIa.precio_objetivo, 4)} · Stop ${fmtNum(data.fundamentalIa.stop_loss_sugerido, 4)}`,
+    )
+    line(`Horizonte: ${data.fundamentalIa.horizonte || '—'}`)
+    if (data.fundamentalIa.accion_concreta) {
+      y += 1
+      subtitle('Acción concreta')
+      paragraph(markdownToPlainText(data.fundamentalIa.accion_concreta))
+    }
+    const mv = data.fundamentalIa.modelos_valuacion
+    if (mv) {
+      y += 1
+      section('Modelos de Valuación')
+      const precio = data.price
+      const dcfVal = mv.dcf?.valor_intrinseco ?? null
+      const peVal = mv.relative_multiples?.valor_modelo_pe ?? null
+      const pbVal = mv.relative_multiples?.valor_modelo_pb ?? null
+      const psVal = mv.relative_multiples?.valor_modelo_ps ?? null
+      const modelRow = (name: string, val: number | null | undefined) => {
+        line(
+          `${name}: ${fmtNum(val, 4)} vs ${fmtNum(precio, 4)} · Upside ${fmtPct(upsidePct(val, precio), 2)} · ${valSemaforo(val, precio)}`,
+        )
+      }
+      modelRow('DCF Terminal', dcfVal)
+      modelRow('Mean P/E', peVal)
+      modelRow('Mean P/B', pbVal)
+      modelRow('Mean P/S', psVal)
+    }
     y += 1
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(70, 70, 70)
-    line('Fortalezas')
-    doc.setFont('courier', 'normal')
-    doc.setTextColor(26, 28, 32)
+    subtitle('Fortalezas')
     for (const x of data.fundamentalIa.fortalezas || []) line(`• ${x}`)
     y += 1
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(70, 70, 70)
-    line('Riesgos')
-    doc.setFont('courier', 'normal')
-    doc.setTextColor(26, 28, 32)
+    subtitle('Riesgos')
     for (const x of data.fundamentalIa.riesgos || []) line(`• ${x}`)
     y += 1
     if (data.fundamentalIa.catalizadores?.length) {
-      doc.setFont('helvetica', 'bold')
-      doc.setTextColor(70, 70, 70)
-      line('Catalizadores')
-      doc.setFont('courier', 'normal')
-      doc.setTextColor(26, 28, 32)
+      subtitle('Catalizadores')
       for (const x of data.fundamentalIa.catalizadores) line(`• ${x}`)
       y += 1
     }
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(70, 70, 70)
-    line('Resumen')
-    doc.setFont('courier', 'normal')
-    doc.setTextColor(26, 28, 32)
+    subtitle('Resumen')
     paragraph(markdownToPlainText(data.fundamentalIa.resumen || ''))
+  }
+
+  if (data.newsData?.noticias?.length) {
+    ensure(12)
+    doc.addPage()
+    y = MARGIN_MM
+    section('Noticias recientes')
+    for (const n of data.newsData.noticias) {
+      subtitle(n.titulo || 'Sin título')
+      const meta = `${n.fuente || 'Fuente N/D'} · ${n.fecha || 'Fecha N/D'} · Impacto: ${(n.impacto || 'NEUTRO').toUpperCase()}`
+      line(meta)
+      if (n.analisis) {
+        const oneLine = markdownToPlainText(n.analisis).split('\n')[0]
+        paragraph(`IA: ${oneLine}`)
+      }
+      y += 1
+    }
   }
 
   const footer1 = `INGELD Financial Assistant · ${fechaLarga}`
