@@ -209,23 +209,22 @@ export async function exportActivoPdf(data: ExportActivoPdfInput) {
     doc.setFont('courier', 'normal')
     doc.setTextColor(26, 28, 32)
   }
-  const addChartImage = async (
-    title: string,
+  const captureChartImage = async (
     refObj: RefObject<HTMLDivElement | null> | null | undefined,
-  ): Promise<boolean> => {
+  ): Promise<{ img: string; widthPx: number; heightPx: number } | null> => {
     try {
-      if (!refObj?.current) return false
-      const canvas = await html2canvas(refObj.current, { scale: 2, backgroundColor: '#ffffff' })
-      const img = canvas.toDataURL('image/png')
-      const targetW = 170
-      const targetH = (canvas.height * targetW) / canvas.width
-      section(title)
-      ensure(targetH + 4)
-      doc.addImage(img, 'PNG', MARGIN_MM, y, targetW, targetH)
-      y += targetH + 4
-      return true
+      if (!refObj?.current) return null
+      const canvas = await html2canvas(refObj.current, {
+        scale: 1.5,
+        backgroundColor: '#ffffff',
+      })
+      return {
+        img: canvas.toDataURL('image/png'),
+        widthPx: canvas.width,
+        heightPx: canvas.height,
+      }
     } catch {
-      return false
+      return null
     }
   }
 
@@ -283,11 +282,30 @@ export async function exportActivoPdf(data: ExportActivoPdfInput) {
   y += 3
 
   if (data.financialsData?.años?.length) {
-    section('Tendencias Financieras')
-    const incomeOk = await addChartImage('Chart: Ingresos y rentabilidad', data.chartRefs?.income)
-    const cashOk = await addChartImage('Chart: Flujo de caja', data.chartRefs?.cashflow)
-    const valOk = await addChartImage('Chart: Valuación', data.chartRefs?.valuation)
-    if (!incomeOk || !cashOk || !valOk) {
+    const incomeImg = await captureChartImage(data.chartRefs?.income)
+    const cashImg = await captureChartImage(data.chartRefs?.cashflow)
+    const valImg = await captureChartImage(data.chartRefs?.valuation)
+    if (incomeImg && cashImg && valImg) {
+      const wSmall = 80
+      const wWide = 170
+      const hIncome = (incomeImg.heightPx * wSmall) / incomeImg.widthPx
+      const hCash = (cashImg.heightPx * wSmall) / cashImg.widthPx
+      const hVal = (valImg.heightPx * wWide) / valImg.widthPx
+      const topRowH = Math.max(hIncome, hCash)
+      const neededChartsH = topRowH + 6 + hVal + 4
+      if (y + 12 + neededChartsH > bottomY) {
+        doc.addPage()
+        y = MARGIN_MM
+      }
+      section('Tendencias Financieras')
+      const rowY = y
+      doc.addImage(incomeImg.img, 'PNG', 15, rowY, wSmall, hIncome)
+      doc.addImage(cashImg.img, 'PNG', 110, rowY, wSmall, hCash)
+      y = rowY + topRowH + 6
+      doc.addImage(valImg.img, 'PNG', 15, y, wWide, hVal)
+      y += hVal + 4
+    } else {
+      section('Tendencias Financieras')
       const years = data.financialsData.años
       const row = (label: string, vals: Array<number | null | undefined>) => {
         const cells = vals.map((v) => fmtBig(v)).join(' | ')
