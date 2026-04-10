@@ -20,6 +20,7 @@
 
   --nav-text: #eceef2;
   --nav-text-muted: rgba(236, 238, 242, 0.55);
+  --nav-text-active: #eceef2;
   --nav-text-dimmed: rgba(236, 238, 242, 0.35);
 
   --accent: #00a87a;
@@ -160,16 +161,16 @@ button {
   outline-offset: 2px;
 }
 
-.app-header .nav a {
+.app-header .nav a.nav-link {
   color: var(--nav-text-muted);
 }
 
-.app-header .nav a:hover {
-  color: var(--nav-text);
+.app-header .nav a.nav-link:hover {
+  color: var(--nav-text-active);
   background: rgba(255, 255, 255, 0.08);
 }
 
-.app-header .nav a.active {
+.app-header .nav a.nav-link.active {
   color: var(--nav-text);
   background: var(--accent-dim);
   box-shadow: inset 0 0 0 1px rgba(0, 168, 122, 0.45);
@@ -204,7 +205,7 @@ button {
   gap: 0.25rem;
 }
 
-.nav a {
+.nav a.nav-link {
   padding: 0.45rem 0.75rem;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
@@ -4906,23 +4907,28 @@ button {
   z-index: 1000;
 }
 
-.nav-dropdown-trigger {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+.app-header .nav .nav-dropdown > button.nav-link {
+  color: var(--nav-text-muted);
   background: transparent;
   border: none;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 500;
   cursor: pointer;
-  padding: 0.35rem 0.5rem;
+  padding: 0.45rem 0.75rem;
   border-radius: var(--radius-sm);
+  transition: background 0.15s, color 0.15s;
 }
 
-.nav-dropdown-trigger:hover,
-.nav-dropdown-trigger.active {
-  color: var(--accent);
+.app-header .nav .nav-dropdown > button.nav-link:hover {
+  color: var(--nav-text-active);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.app-header .nav .nav-dropdown > button.nav-link.active {
+  color: var(--nav-text);
+  background: var(--accent-dim);
+  box-shadow: inset 0 0 0 1px rgba(0, 168, 122, 0.45);
 }
 
 .nav-dropdown-menu {

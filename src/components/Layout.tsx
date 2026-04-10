@@ -51,7 +51,9 @@ export function Layout() {
                 key={to}
                 to={to}
                 end={Boolean(end)}
-                className={({ isActive }) => (isActive ? 'active' : undefined)}
+                className={({ isActive }) =>
+                  ['nav-link', isActive ? 'active' : ''].filter(Boolean).join(' ')
+                }
               >
                 {label}
               </NavLink>
@@ -59,7 +61,7 @@ export function Layout() {
             <div className="nav-dropdown" ref={pfRef}>
               <button
                 type="button"
-                className={['nav-dropdown-trigger', pfNavActive ? 'active' : ''].filter(Boolean).join(' ')}
+                className={['nav-link', pfNavActive ? 'active' : ''].filter(Boolean).join(' ')}
                 aria-expanded={pfOpen}
                 aria-haspopup="true"
                 onClick={() => setPfOpen((v) => !v)}
@@ -112,7 +114,9 @@ export function Layout() {
                 key={to}
                 to={to}
                 end={Boolean(end)}
-                className={({ isActive }) => (isActive ? 'active' : undefined)}
+                className={({ isActive }) =>
+                  ['nav-link', isActive ? 'active' : ''].filter(Boolean).join(' ')
+                }
               >
                 {label}
               </NavLink>
