@@ -5,6 +5,7 @@
 :root {
   --bg-base: #f0ede8;
   --bg-card: #faf9f7;
+  --card-bg: var(--bg-card);
   --bg-tape: #e8e4de;
   --bg-navbar: #1c1f24;
   --nav-bg: #1c1f24;
@@ -3082,6 +3083,22 @@ button {
   color: var(--text-body);
 }
 
+.portfolio-ai-ul {
+  margin: 0.4rem 0 0.5rem;
+  padding-left: 1.35rem;
+  list-style: disc;
+}
+
+.portfolio-ai-ul li {
+  margin: 0.28rem 0;
+  line-height: 1.55;
+  padding-left: 0.15rem;
+}
+
+.portfolio-ai-ul li::marker {
+  color: var(--accent);
+}
+
 .portfolio-ai-h2 {
   margin: 1.1rem 0 0.5rem;
   font-family: var(--font-mono);
@@ -4136,27 +4153,175 @@ button {
 }
 
 /* Dashboard briefing */
-.briefing-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin: 0.45rem 0 0.6rem;
+.briefing-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1rem 1.15rem 1.1rem;
+  border-left: 4px solid var(--accent);
 }
 
-.briefing-pill {
+.briefing-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.65rem;
+}
+
+.briefing-header-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.briefing-header-date {
+  font-family: var(--font-prose);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+
+.briefing-markets {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.45rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.15rem 0 0.35rem;
+  margin-bottom: 0.15rem;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.briefing-markets::-webkit-scrollbar {
+  height: 5px;
+}
+
+.briefing-markets::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+
+.market-pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   font-family: var(--font-mono);
   font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.32rem 0.65rem;
   border-radius: 999px;
-  padding: 0.18rem 0.5rem;
-  background: var(--bg-tape);
+  border: 1px solid var(--border-subtle);
 }
 
-.briefing-pill.gain {
+.market-pill.gain {
+  background: var(--gain-bg);
   color: var(--gain);
 }
 
-.briefing-pill.loss {
+.market-pill.loss {
+  background: var(--loss-bg);
   color: var(--loss);
+}
+
+.market-name {
+  opacity: 0.92;
+}
+
+.market-var {
+  font-variant-numeric: tabular-nums;
+}
+
+.briefing-sep {
+  border: none;
+  height: 1px;
+  margin: 0.65rem 0 0.85rem;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--border) 8%,
+    var(--border) 92%,
+    transparent
+  );
+}
+
+.briefing-content {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.briefing-content-placeholder {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.65;
+}
+
+.briefing-content .portfolio-ai-h2 {
+  font-size: 1.1rem;
+  color: var(--accent);
+  border-bottom-color: rgba(0, 168, 122, 0.35);
+}
+
+.briefing-content .portfolio-ai-p {
+  line-height: 1.7;
+  color: var(--text-heading);
+}
+
+.briefing-content .portfolio-ai-ul li {
+  line-height: 1.65;
+  color: var(--text-heading);
+}
+
+.briefing-content strong {
+  color: var(--text-heading);
+  font-weight: 600;
+}
+
+.briefing-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1rem;
+  padding-top: 0.35rem;
+}
+
+.briefing-more-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  transition: filter 0.15s, transform 0.1s;
+}
+
+.briefing-more-btn:hover {
+  filter: brightness(1.05);
+  text-decoration: none;
+  color: #fff;
+}
+
+@media (max-width: 640px) {
+  .briefing-footer {
+    justify-content: stretch;
+  }
+
+  .briefing-more-btn {
+    width: 100%;
+  }
 }
 
 /* Comparador */

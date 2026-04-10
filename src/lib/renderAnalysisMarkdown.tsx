@@ -10,18 +10,54 @@ function parseInline(s: string): ReactNode {
   })
 }
 
-export function AnalysisMarkdown({ source }: { source: string }) {
+const LIST_RE = /^\s*[-*]\s+(.+)$/
+
+export function AnalysisMarkdown({
+  source,
+  rootClassName = 'portfolio-ai-md',
+}: {
+  source: string
+  rootClassName?: string
+}) {
   const lines = source.replace(/\r\n/g, '\n').split('\n')
   const blocks: ReactNode[] = []
   let key = 0
   const nextKey = () => key++
 
-  for (let i = 0; i < lines.length; i++) {
+  let i = 0
+  while (i < lines.length) {
     const raw = lines[i]
     const t = raw.trimEnd()
+    const trim = t.trim()
 
-    if (/^---+$/u.test(t.trim())) {
+    const listMatch = trim.match(LIST_RE)
+    if (listMatch) {
+      const items: string[] = []
+      let j = i
+      while (j < lines.length) {
+        const lineRaw = lines[j]
+        if (lineRaw.trim() === '') break
+        const m = lineRaw.trimEnd().trim().match(LIST_RE)
+        if (!m) break
+        items.push(m[1])
+        j++
+      }
+      if (items.length) {
+        blocks.push(
+          <ul key={nextKey()} className="portfolio-ai-ul">
+            {items.map((text, idx) => (
+              <li key={idx}>{parseInline(text)}</li>
+            ))}
+          </ul>,
+        )
+        i = j
+        continue
+      }
+    }
+
+    if (/^---+$/u.test(trim)) {
       blocks.push(<hr key={nextKey()} className="portfolio-ai-hr" />)
+      i++
       continue
     }
 
@@ -31,6 +67,7 @@ export function AnalysisMarkdown({ source }: { source: string }) {
           {parseInline(t.slice(4))}
         </h3>,
       )
+      i++
       continue
     }
 
@@ -40,6 +77,7 @@ export function AnalysisMarkdown({ source }: { source: string }) {
           {parseInline(t.slice(3))}
         </h2>,
       )
+      i++
       continue
     }
 
@@ -49,24 +87,13 @@ export function AnalysisMarkdown({ source }: { source: string }) {
           {parseInline(t.slice(2))}
         </h2>,
       )
+      i++
       continue
     }
 
-    const listMatch = t.match(/^\s*-\s+(.*)$/)
-    if (listMatch) {
-      blocks.push(
-        <div key={nextKey()} className="portfolio-ai-li">
-          <span className="portfolio-ai-bullet" aria-hidden>
-            ·
-          </span>
-          <span className="portfolio-ai-li-text">{parseInline(listMatch[1])}</span>
-        </div>,
-      )
-      continue
-    }
-
-    if (t.trim() === '') {
+    if (trim === '') {
       blocks.push(<div key={nextKey()} className="portfolio-ai-spacer" />)
+      i++
       continue
     }
 
@@ -75,7 +102,8 @@ export function AnalysisMarkdown({ source }: { source: string }) {
         {parseInline(t)}
       </p>,
     )
+    i++
   }
 
-  return <div className="portfolio-ai-md">{blocks}</div>
+  return <div className={rootClassName}>{blocks}</div>
 }

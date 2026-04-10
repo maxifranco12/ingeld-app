@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useFavoritos } from '../hooks/useFavoritos'
+import { AnalysisMarkdown } from '../lib/renderAnalysisMarkdown'
 
 const API = import.meta.env.VITE_API_URL ?? ''
 
@@ -317,31 +318,52 @@ export function Dashboard() {
       </section>
 
       <section className="dash-zone" aria-labelledby="z2">
-        <div className="ai-bar">
-          <div className="ai-bar-body">
-            <p className="ai-bar-lead font-prose">
-              <strong>Briefing del día — {summary ? formatDate(summary.fecha) : '…'}:</strong>
-            </p>
-            {!loading && summary?.mercados ? (
-              <div className="briefing-pills">
-                {Object.entries(summary.mercados).map(([k, v]) => (
-                  <span key={k} className={`briefing-pill ${(v.changePct || 0) >= 0 ? 'gain' : 'loss'}`}>
-                    {k}: {(v.changePct || 0) >= 0 ? '+' : ''}
-                    {(v.changePct || 0).toFixed(2)}%
-                  </span>
-                ))}
-              </div>
-            ) : null}
-            <p className="ai-bar-text font-prose">
-              {loading
-                ? 'Cargando…'
-                : summary?.resumen ??
-                  'Sin resumen disponible todavía.'}
-            </p>
+        <div className="briefing-card">
+          <div className="briefing-header">
+            <span className="briefing-header-title" id="z2">
+              <span aria-hidden>📊</span>
+              Briefing del día
+            </span>
+            <span className="briefing-header-date">
+              {summary ? formatDate(summary.fecha) : loading ? '…' : '—'}
+            </span>
           </div>
-          <Link className="ai-bar-btn" to="/analisis">
-            Ver análisis completo
-          </Link>
+          {!loading && summary?.mercados ? (
+            <div className="briefing-markets">
+              {Object.entries(summary.mercados).map(([k, v]) => {
+                const pos = (v.changePct || 0) >= 0
+                return (
+                  <span
+                    key={k}
+                    className={`market-pill ${pos ? 'gain' : 'loss'}`}
+                  >
+                    <span className="market-name">{k}</span>
+                    <span className="market-var">
+                      {pos ? '+' : ''}
+                      {(v.changePct || 0).toFixed(2)}%
+                    </span>
+                  </span>
+                )
+              })}
+            </div>
+          ) : null}
+          <hr className="briefing-sep" aria-hidden />
+          <div className="briefing-content">
+            {loading ? (
+              <p className="font-prose briefing-content-placeholder">Cargando…</p>
+            ) : summary?.resumen ? (
+              <AnalysisMarkdown source={summary.resumen} />
+            ) : (
+              <p className="font-prose briefing-content-placeholder">
+                Sin resumen disponible todavía.
+              </p>
+            )}
+          </div>
+          <div className="briefing-footer">
+            <Link className="briefing-more-btn" to="/analisis">
+              Ver análisis completo
+            </Link>
+          </div>
         </div>
       </section>
 
