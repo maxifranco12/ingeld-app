@@ -49,17 +49,23 @@ export function Landing() {
         <div className="landing-section-inner">
           <h2 className="landing-section-title">Simple y transparente</h2>
           <div className="landing-pricing-card">
-            <p className="landing-price">$5 USD/mes</p>
+            <p className="landing-price">$2 USD por semana</p>
+            <p className="landing-pricing-sub font-prose">
+              El café de los domingos. Acceso completo a INGELD toda la semana.
+            </p>
             <ul className="landing-pricing-list font-prose">
               <li>Scanner avanzado + comparador de activos</li>
               <li>Análisis IA completo (técnico + fundamental + noticias)</li>
+              <li>Gráficos con timeframes, indicadores y contexto histórico</li>
               <li>Alertas inteligentes y reportes PDF</li>
               <li>Historial y perfil sincronizado en la nube</li>
             </ul>
             <Link to="/register" className="landing-btn landing-btn--primary">
               Empezar ahora
             </Link>
-            <p className="landing-pricing-foot font-prose">Cancelá cuando quieras</p>
+            <p className="landing-pricing-foot font-prose">
+              Equivale a unos $8 USD/mes · Cancelá cuando quieras
+            </p>
           </div>
         </div>
       </section>

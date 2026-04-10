@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 
 JWT_SECRET = os.getenv("JWT_SECRET", "")
 if not JWT_SECRET:
@@ -13,6 +14,7 @@ JWT_ALGORITHM = "HS256"
 import json
 import random
 import re
+from datetime import date as date_type
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -25,7 +27,17 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from auth_middleware import CurrentUser
-from database import AnalysisHistory, PasswordReset, User, UserProfile, get_db, utcnow
+from database import (
+    AnalysisHistory,
+    Asset,
+    Goal,
+    Liability,
+    PasswordReset,
+    User,
+    UserProfile,
+    get_db,
+    utcnow,
+)
 
 router = APIRouter()
 
@@ -33,7 +45,8 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "24"))
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
-RESEND_FROM = os.getenv("RESEND_FROM", "noreply@ingeld.app")
+RESEND_FROM = "INGELD <onboarding@resend.dev>"
+resend.api_key = os.getenv("RESEND_API_KEY", "")
 
 
 def _hash_password(p: str) -> str:
@@ -116,6 +129,38 @@ class HistorialCreateBody(BaseModel):
     score_total: Optional[int] = None
 
 
+class GoalCreateBody(BaseModel):
+    nombre: str = Field(..., min_length=1, max_length=255)
+    monto_objetivo: float = Field(..., gt=0)
+    monto_actual: float = Field(0, ge=0)
+    moneda: str = Field("USD", max_length=8)
+    fecha_objetivo: Optional[date_type] = None
+    color: str = Field("#00a87a", max_length=16)
+
+
+class GoalUpdateBody(BaseModel):
+    nombre: Optional[str] = Field(None, max_length=255)
+    monto_objetivo: Optional[float] = Field(None, gt=0)
+    monto_actual: Optional[float] = Field(None, ge=0)
+    moneda: Optional[str] = Field(None, max_length=8)
+    fecha_objetivo: Optional[date_type] = None
+    color: Optional[str] = Field(None, max_length=16)
+
+
+class AssetCreateBody(BaseModel):
+    nombre: str = Field(..., min_length=1, max_length=255)
+    tipo: str = Field(..., min_length=1, max_length=32)
+    valor: float = Field(..., ge=0)
+    moneda: str = Field("USD", max_length=8)
+
+
+class LiabilityCreateBody(BaseModel):
+    nombre: str = Field(..., min_length=1, max_length=255)
+    tipo: str = Field(..., min_length=1, max_length=32)
+    monto: float = Field(..., ge=0)
+    moneda: str = Field("USD", max_length=8)
+
+
 def _ensure_profile(db: Session, user: User) -> UserProfile:
     p = db.query(UserProfile).filter(UserProfile.user_id == user.id).first()
     if p:
@@ -151,6 +196,7 @@ def register(body: RegisterBody, db: Session = Depends(get_db)) -> dict[str, Any
         email=email_n,
         username=uname,
         hashed_password=_hash_password(body.password),
+        plan="free",
     )
     db.add(user)
     try:
@@ -199,28 +245,43 @@ def forgot_password(body: ForgotPasswordBody, db: Session = Depends(get_db)) -> 
         db.add(pr)
         db.commit()
         if RESEND_API_KEY:
-            resend.api_key = RESEND_API_KEY
-            html = f"""<!DOCTYPE html>
-<html><body style="margin:0;padding:24px;background:#faf6f0;font-family:Georgia,serif;">
-<div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:28px;
-box-shadow:0 4px 24px rgba(0,0,0,0.06);border:1px solid rgba(0,168,122,0.15);">
-<p style="color:#1a1c20;font-size:1rem;margin:0 0 12px;">INGELD</p>
-<h1 style="color:#00a87a;font-size:1.5rem;margin:0 0 16px;">Tu código de recuperación</h1>
-<p style="color:#5c5f66;line-height:1.5;">Usá este código en la app (vence en 15 minutos):</p>
-<p style="font-size:1.75rem;font-weight:700;letter-spacing:0.2em;color:#00a87a;margin:20px 0;">{code}</p>
-<p style="color:#8a8d94;font-size:0.85rem;">Si no solicitaste esto, ignorá este mensaje.</p>
-</div></body></html>"""
+            params = {
+                "from": RESEND_FROM,
+                "to": [user.email],
+                "subject": f"Tu código INGELD: {code}",
+                "html": f"""
+      <div style="font-family: monospace; max-width: 500px; margin: 0 auto; padding: 40px;">
+        <h1 style="color: #00a87a; font-size: 28px;">INGELD</h1>
+        <p style="color: #666; font-size: 14px;">Financial Assistant</p>
+        <hr style="border: 1px solid #e0ddd8; margin: 20px 0;">
+        <h2 style="color: #1c1f24;">Tu código de recuperación</h2>
+        <p style="color: #444;">Usá este código para restablecer tu contraseña:</p>
+        <div style="background: #f0ede8; padding: 20px; text-align: center;
+                    border-radius: 8px; margin: 20px 0;">
+          <span style="font-size: 36px; font-weight: bold;
+                       letter-spacing: 8px; color: #00a87a;">{code}</span>
+        </div>
+        <p style="color: #666; font-size: 12px;">
+          Este código expira en 15 minutos.<br>
+          Si no solicitaste este código, ignorá este email.
+        </p>
+        <hr style="border: 1px solid #e0ddd8; margin: 20px 0;">
+        <p style="color: #999; font-size: 11px;">
+          INGELD Financial Assistant · Este servicio es informativo
+          y no constituye asesoramiento financiero.
+        </p>
+      </div>
+    """,
+            }
             try:
-                resend.Emails.send(
-                    {
-                        "from": RESEND_FROM,
-                        "to": [user.email],
-                        "subject": f"Tu código INGELD: {code}",
-                        "html": html,
-                    }
+                print(
+                    f"Enviando email a {user.email} con código {code}",
+                    file=sys.stderr,
                 )
-            except Exception:
-                pass
+                response = resend.Emails.send(params)
+                print(f"Resend response: {response}", file=sys.stderr)
+            except Exception as e:
+                print(f"Resend error: {e!r}", file=sys.stderr)
     return {"ok": "true"}
 
 
@@ -344,3 +405,183 @@ def post_historial(
     db.commit()
     db.refresh(item)
     return {"ok": "true", "id": item.id}
+
+
+def _goal_to_dict(g: Goal) -> dict[str, Any]:
+    return {
+        "id": g.id,
+        "nombre": g.nombre,
+        "monto_objetivo": g.monto_objetivo,
+        "monto_actual": g.monto_actual,
+        "moneda": g.moneda,
+        "fecha_objetivo": g.fecha_objetivo.isoformat() if g.fecha_objetivo else None,
+        "color": g.color,
+        "created_at": g.created_at.isoformat() if g.created_at else None,
+    }
+
+
+@router.get("/metas")
+def list_metas(user: CurrentUser, db: Session = Depends(get_db)) -> dict[str, Any]:
+    rows = db.query(Goal).filter(Goal.user_id == user.id).order_by(Goal.id.desc()).all()
+    return {"items": [_goal_to_dict(g) for g in rows]}
+
+
+@router.post("/metas")
+def create_meta(
+    body: GoalCreateBody,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    g = Goal(
+        user_id=user.id,
+        nombre=body.nombre.strip(),
+        monto_objetivo=body.monto_objetivo,
+        monto_actual=body.monto_actual,
+        moneda=body.moneda.strip().upper() or "USD",
+        fecha_objetivo=body.fecha_objetivo,
+        color=body.color or "#00a87a",
+    )
+    db.add(g)
+    db.commit()
+    db.refresh(g)
+    return {"ok": "true", "id": g.id, "goal": _goal_to_dict(g)}
+
+
+@router.put("/metas/{goal_id}")
+def update_meta(
+    goal_id: int,
+    body: GoalUpdateBody,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    g = db.query(Goal).filter(Goal.id == goal_id, Goal.user_id == user.id).first()
+    if not g:
+        raise HTTPException(404, "Meta no encontrada")
+    if body.nombre is not None:
+        g.nombre = body.nombre.strip()
+    if body.monto_objetivo is not None:
+        g.monto_objetivo = body.monto_objetivo
+    if body.monto_actual is not None:
+        g.monto_actual = body.monto_actual
+    if body.moneda is not None:
+        g.moneda = body.moneda.strip().upper()
+    if body.fecha_objetivo is not None:
+        g.fecha_objetivo = body.fecha_objetivo
+    if body.color is not None:
+        g.color = body.color
+    db.commit()
+    db.refresh(g)
+    return {"ok": "true", "goal": _goal_to_dict(g)}
+
+
+@router.delete("/metas/{goal_id}")
+def delete_meta(goal_id: int, user: CurrentUser, db: Session = Depends(get_db)) -> dict[str, str]:
+    g = db.query(Goal).filter(Goal.id == goal_id, Goal.user_id == user.id).first()
+    if not g:
+        raise HTTPException(404, "Meta no encontrada")
+    db.delete(g)
+    db.commit()
+    return {"ok": "true"}
+
+
+def _asset_to_dict(a: Asset) -> dict[str, Any]:
+    return {
+        "id": a.id,
+        "nombre": a.nombre,
+        "tipo": a.tipo,
+        "valor": a.valor,
+        "moneda": a.moneda,
+        "created_at": a.created_at.isoformat() if a.created_at else None,
+    }
+
+
+def _liab_to_dict(l: Liability) -> dict[str, Any]:
+    return {
+        "id": l.id,
+        "nombre": l.nombre,
+        "tipo": l.tipo,
+        "monto": l.monto,
+        "moneda": l.moneda,
+        "created_at": l.created_at.isoformat() if l.created_at else None,
+    }
+
+
+@router.get("/assets")
+def list_assets(user: CurrentUser, db: Session = Depends(get_db)) -> dict[str, Any]:
+    rows = db.query(Asset).filter(Asset.user_id == user.id).order_by(Asset.id.desc()).all()
+    return {"items": [_asset_to_dict(a) for a in rows]}
+
+
+@router.post("/assets")
+def create_asset(
+    body: AssetCreateBody,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    a = Asset(
+        user_id=user.id,
+        nombre=body.nombre.strip(),
+        tipo=body.tipo.strip().lower(),
+        valor=body.valor,
+        moneda=body.moneda.strip().upper() or "USD",
+    )
+    db.add(a)
+    db.commit()
+    db.refresh(a)
+    return {"ok": "true", "id": a.id, "asset": _asset_to_dict(a)}
+
+
+@router.delete("/assets/{asset_id}")
+def delete_asset(asset_id: int, user: CurrentUser, db: Session = Depends(get_db)) -> dict[str, str]:
+    a = db.query(Asset).filter(Asset.id == asset_id, Asset.user_id == user.id).first()
+    if not a:
+        raise HTTPException(404, "Activo no encontrado")
+    db.delete(a)
+    db.commit()
+    return {"ok": "true"}
+
+
+@router.get("/liabilities")
+def list_liabilities(user: CurrentUser, db: Session = Depends(get_db)) -> dict[str, Any]:
+    rows = (
+        db.query(Liability)
+        .filter(Liability.user_id == user.id)
+        .order_by(Liability.id.desc())
+        .all()
+    )
+    return {"items": [_liab_to_dict(x) for x in rows]}
+
+
+@router.post("/liabilities")
+def create_liability(
+    body: LiabilityCreateBody,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    l = Liability(
+        user_id=user.id,
+        nombre=body.nombre.strip(),
+        tipo=body.tipo.strip().lower(),
+        monto=body.monto,
+        moneda=body.moneda.strip().upper() or "USD",
+    )
+    db.add(l)
+    db.commit()
+    db.refresh(l)
+    return {"ok": "true", "id": l.id, "liability": _liab_to_dict(l)}
+
+
+@router.delete("/liabilities/{liability_id}")
+def delete_liability(
+    liability_id: int,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    l = db.query(Liability).filter(
+        Liability.id == liability_id, Liability.user_id == user.id
+    ).first()
+    if not l:
+        raise HTTPException(404, "Pasivo no encontrado")
+    db.delete(l)
+    db.commit()
+    return {"ok": "true"}

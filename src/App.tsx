@@ -18,6 +18,8 @@ import { Perfil } from './pages/Perfil'
 import { Landing } from './pages/Landing'
 import { Comparador } from './pages/Comparador'
 import { Historial } from './pages/Historial'
+import { Metas } from './pages/Metas'
+import { NetWorth } from './pages/NetWorth'
 
 function RootRoute() {
   const { isAuthenticated, loading } = useAuth()
@@ -48,6 +50,8 @@ export default function App() {
             <Route path="perfil" element={<Perfil />} />
             <Route path="comparador" element={<Comparador />} />
             <Route path="historial" element={<Historial />} />
+            <Route path="metas" element={<Metas />} />
+            <Route path="networth" element={<NetWorth />} />
             <Route path="admin" element={<AdminOnly />} />
           </Route>
         </Route>

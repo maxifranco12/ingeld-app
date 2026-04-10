@@ -8,6 +8,7 @@ import math
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
+from collections import Counter
 from datetime import date
 from typing import Any, Optional
 
@@ -49,12 +50,19 @@ _QUOTE_TTL_SEC = 120.0
 _ASSET_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 _ASSET_TTL_SEC = 180.0
 
-_ASSET_PERIOD_MAP: dict[str, str] = {
-    "1M": "1mo",
-    "3M": "3mo",
-    "6M": "6mo",
-    "1Y": "1y",
+# Rango UI → (yfinance period, interval)
+_ASSET_YF_SPEC: dict[str, tuple[str, str]] = {
+    "1D": ("1d", "5m"),
+    "1W": ("5d", "1h"),
+    "1M": ("1mo", "1d"),
+    "3M": ("3mo", "1d"),
+    "6M": ("6mo", "1d"),
+    "1Y": ("1y", "1d"),
+    "5Y": ("5y", "1wk"),
 }
+
+_HIST_ANALYSIS_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_HIST_ANALYSIS_TTL_SEC = 3600.0
 
 DEFAULT_OVERVIEW_SYMBOLS = ["^MERV", "GGAL.BA", "AL30.BA", "SPY", "EWZ", "BMA.BA"]
 
@@ -345,7 +353,7 @@ def _merge_search_results(
 
 def _norm_chart_range(r: str) -> str:
     u = (r or "6M").strip().upper()
-    return u if u in _ASSET_PERIOD_MAP else "6M"
+    return u if u in _ASSET_YF_SPEC else "6M"
 
 
 def _scalar_json(v: Any) -> Any:
@@ -471,13 +479,21 @@ def fundamentals_from_info(info: dict[str, Any]) -> dict[str, Any]:
 def _asset_payload_impl(symbol: str, chart_range: str) -> dict[str, Any]:
     sym = normalize_ticker(symbol.strip())
     cr = _norm_chart_range(chart_range)
-    yf_period = _ASSET_PERIOD_MAP[cr]
+    yf_period, yf_interval = _ASSET_YF_SPEC[cr]
     ticker = yf.Ticker(sym)
-    hist = ticker.history(period=yf_period, interval="1d")
-    if (hist is None or hist.empty) and yf_period != "3mo":
-        hist = ticker.history(period="3mo", interval="1d")
+    hist = ticker.history(period=yf_period, interval=yf_interval)
+    if hist is None or hist.empty:
+        hist = ticker.history(period="1mo", interval="1d")
     if hist is None or hist.empty:
         raise ValueError("No hay datos disponibles para este ticker")
+
+    if cr == "1D":
+        idx_utc = pd.DatetimeIndex(pd.to_datetime(hist.index, utc=True))
+        cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=6)
+        hist_f = hist.loc[idx_utc >= cutoff]
+        if hist_f is not None and not hist_f.empty and len(hist_f) >= 12:
+            hist = hist_f
+
     close = hist["Close"].astype(float)
     last = float(close.iloc[-1])
     prev = float(close.iloc[-2]) if len(close) > 1 else last
@@ -493,6 +509,8 @@ def _asset_payload_impl(symbol: str, chart_range: str) -> dict[str, Any]:
     macd_line, macd_sig, macd_hist = _macd_numbers(close)
     macd_dir = _macd_label(close)
     bb_u, bb_m, bb_l = _bollinger_triple(close, 20, 2.0)
+    macd_ok = all(math.isfinite(x) for x in (macd_line, macd_sig, macd_hist))
+    bb_ok = all(math.isfinite(x) for x in (bb_u, bb_m, bb_l))
 
     ma20_s = close.rolling(20).mean()
     ma50_s = close.rolling(50).mean()
@@ -503,7 +521,9 @@ def _asset_payload_impl(symbol: str, chart_range: str) -> dict[str, Any]:
     if len(close) >= 50 and not pd.isna(ma50_s.iloc[-1]):
         ma50v = float(ma50_s.iloc[-1])
 
-    if last > bb_u:
+    if not bb_ok:
+        bb_vs = "dentro"
+    elif last > bb_u:
         bb_vs = "sobre_banda_superior"
     elif last < bb_l:
         bb_vs = "bajo_banda_inferior"
@@ -551,15 +571,15 @@ def _asset_payload_impl(symbol: str, chart_range: str) -> dict[str, Any]:
         "volume": last_vol,
         "rsi14": round(rsi, 2) if rsi is not None else None,
         "macd": {
-            "linea": round(macd_line, 6),
-            "senal": round(macd_sig, 6),
-            "histograma": round(macd_hist, 6),
+            "linea": round(macd_line, 6) if macd_ok else None,
+            "senal": round(macd_sig, 6) if macd_ok else None,
+            "histograma": round(macd_hist, 6) if macd_ok else None,
             "direccion": macd_dir,
         },
         "bollinger": {
-            "superior": round(bb_u, 6),
-            "media": round(bb_m, 6),
-            "inferior": round(bb_l, 6),
+            "superior": round(bb_u, 6) if bb_ok else None,
+            "media": round(bb_m, 6) if bb_ok else None,
+            "inferior": round(bb_l, 6) if bb_ok else None,
             "precio_vs_bandas": bb_vs,
         },
         "ma20": round(ma20v, 6) if ma20v is not None else None,
@@ -599,7 +619,7 @@ def market_asset(
     range_: str = Query(
         "6M",
         alias="range",
-        description="Ventana del gráfico: 1M, 3M, 6M, 1Y",
+        description="Ventana del gráfico: 1D, 1W, 1M, 3M, 6M, 1Y, 5Y",
     ),
 ) -> dict[str, Any]:
     chart_r = _norm_chart_range(range_)
@@ -849,6 +869,312 @@ def market_candidates() -> dict[str, Any]:
     return {"items": out}
 
 
+def _fwd_trading_return(close: pd.Series, start_pos: int, days: int) -> Optional[float]:
+    if start_pos < 0 or start_pos >= len(close):
+        return None
+    end_pos = min(len(close) - 1, start_pos + days)
+    if end_pos <= start_pos:
+        return None
+    a = float(close.iloc[start_pos])
+    b = float(close.iloc[end_pos])
+    if a == 0:
+        return None
+    return round((b / a - 1.0) * 100.0, 2)
+
+
+def _local_extrema_lows(low: pd.Series, w: int = 5) -> list[tuple[int, float]]:
+    out: list[tuple[int, float]] = []
+    for i in range(w, len(low) - w):
+        seg = low.iloc[i - w : i + w + 1]
+        if float(low.iloc[i]) <= float(seg.min()) + 1e-12:
+            out.append((i, float(low.iloc[i])))
+    return out
+
+
+def _local_extrema_highs(hi: pd.Series, w: int = 5) -> list[tuple[int, float]]:
+    out: list[tuple[int, float]] = []
+    for i in range(w, len(hi) - w):
+        seg = hi.iloc[i - w : i + w + 1]
+        if float(hi.iloc[i]) >= float(seg.max()) - 1e-12:
+            out.append((i, float(hi.iloc[i])))
+    return out
+
+
+def _cluster_key_levels(prices: list[float], min_touches: int = 3) -> list[float]:
+    if not prices:
+        return []
+    mx = max(abs(p) for p in prices)
+    step = max(mx * 0.02, 1e-6)
+    buck: Counter = Counter()
+    for p in prices:
+        k = round(p / step) * step
+        buck[k] += 1
+    pairs = [(c, float(k)) for k, c in buck.items() if c >= min_touches]
+    pairs.sort(key=lambda x: -x[0])
+    return [p for _, p in pairs[:12]]
+
+
+def _historical_analysis_payload(symbol: str) -> dict[str, Any]:
+    sym = normalize_ticker(symbol.strip())
+    t = yf.Ticker(sym)
+    hist = t.history(period="5y", interval="1d")
+    if hist is None or hist.empty:
+        raise ValueError("sin datos históricos")
+    close = hist["Close"].astype(float)
+    low = hist["Low"].astype(float)
+    high = hist["High"].astype(float)
+    if len(close) < 60:
+        raise ValueError("historial insuficiente")
+
+    running_max = close.cummax()
+    dd_pct = (close / running_max - 1.0) * 100.0
+    max_drawdown = round(float(dd_pct.min()), 2)
+
+    trough_candidates: list[int] = []
+    for i in range(15, len(dd_pct) - 15):
+        seg = dd_pct.iloc[i - 5 : i + 6]
+        if float(dd_pct.iloc[i]) <= -20.0 and float(dd_pct.iloc[i]) <= float(seg.min()) + 1e-9:
+            trough_candidates.append(i)
+
+    merged_troughs: list[int] = []
+    for idx in trough_candidates:
+        if not merged_troughs or idx - merged_troughs[-1] > 20:
+            merged_troughs.append(idx)
+        elif dd_pct.iloc[idx] < dd_pct.iloc[merged_troughs[-1]]:
+            merged_troughs[-1] = idx
+
+    caidas: list[dict[str, Any]] = []
+    for ti in merged_troughs:
+        trough_px = float(close.iloc[ti])
+        peak_seg = close.iloc[: ti + 1]
+        peak_idx = int(peak_seg.argmax())
+        peak_px = float(close.iloc[peak_idx])
+        drop_pct = round((trough_px / peak_px - 1.0) * 100.0, 2) if peak_px else 0.0
+        if drop_pct > -18.0:
+            continue
+        tiers: list[str] = []
+        if drop_pct <= -20.0:
+            tiers.append("20%")
+        if drop_pct <= -30.0:
+            tiers.append("30%")
+        if drop_pct <= -40.0:
+            tiers.append("40%")
+        if not tiers:
+            continue
+        peak_date = str(hist.index[peak_idx])[:10]
+        trough_date = str(hist.index[ti])[:10]
+        caidas.append(
+            {
+                "peak_date": peak_date,
+                "trough_date": trough_date,
+                "drawdown_pct": drop_pct,
+                "umbrales": tiers,
+                "rebote_3m_pct": _fwd_trading_return(close, ti, 63),
+                "rebote_6m_pct": _fwd_trading_return(close, ti, 126),
+                "rebote_12m_pct": _fwd_trading_return(close, ti, 252),
+            }
+        )
+
+    caidas = sorted(caidas, key=lambda x: float(x["drawdown_pct"]))[:15]
+
+    low_pts = _local_extrema_lows(low, 5)
+    high_pts = _local_extrema_highs(high, 5)
+    soportes = _cluster_key_levels([p for _, p in low_pts], 3)
+    resistencias = _cluster_key_levels([p for _, p in high_pts], 3)
+
+    px_now = float(close.iloc[-1])
+    hi5 = float(close.max())
+    lo5 = float(close.min())
+    vs_max = round((px_now / hi5 - 1.0) * 100.0, 2) if hi5 else None
+    vs_min = round((px_now / lo5 - 1.0) * 100.0, 2) if lo5 else None
+
+    sorted_closes = np.sort(close.to_numpy(dtype=float))
+    rank_i = int(np.searchsorted(sorted_closes, px_now, side="right"))
+    pct_rank = round(rank_i / len(sorted_closes) * 100.0, 2)
+
+    precio_vs: dict[str, Any] = {
+        "vs_maximo_5y": vs_max,
+        "vs_minimo_5y": vs_min,
+        "percentil_historico": pct_rank,
+    }
+
+    info = t.info or {}
+    nombre = info.get("shortName") or info.get("longName") or sym
+
+    blob: dict[str, Any] = {
+        "symbol": sym,
+        "nombre": nombre,
+        "precio_actual": round(px_now, 4),
+        "caidas_historicas": caidas,
+        "soportes": [round(x, 4) for x in soportes],
+        "resistencias": [round(x, 4) for x in resistencias],
+        "max_drawdown": max_drawdown,
+        "precio_vs_historico": precio_vs,
+    }
+
+    insight = (
+        "No se pudo generar el insight en este momento. "
+        "Revisá la clave de Anthropic o intentá más tarde."
+    )
+    anth = (os.getenv("ANTHROPIC_API_KEY") or "").strip()
+    if anth:
+        try:
+            client = Anthropic(api_key=anth)
+            prompt = (
+                "Datos estructurados (JSON) sobre drawdowns y precio histórico de 5 años:\n"
+                + json.dumps(blob, ensure_ascii=False, indent=2)
+                + "\n\nRedactá 3–5 oraciones en español para un inversor retail: contexto de caídas "
+                "pasadas, rebotes típicos (3m/6m/12m cuando aparecen), soportes/resistencias y dónde "
+                "queda el precio vs el rango 5 años. Tono claro, sin jerga. Sin listas numeradas."
+            )
+            msg = client.messages.create(
+                model="claude-sonnet-4-5",
+                max_tokens=600,
+                system=(
+                    "Sos analista senior de equity. Usá solo la información del JSON; no inventes cifras. "
+                    "Si falta dato, no lo menciones."
+                ),
+                messages=[{"role": "user", "content": prompt}],
+            )
+            parts: list[str] = []
+            for b in msg.content:
+                if b.type == "text":
+                    parts.append(b.text)
+            text = "".join(parts).strip()
+            if text:
+                insight = text
+        except Exception:
+            pass
+
+    blob["insight_claude"] = insight
+    return blob
+
+
+@router.get("/historical-analysis/{symbol:path}")
+def market_historical_analysis(symbol: str) -> dict[str, Any]:
+    sym = normalize_ticker(symbol.strip())
+    if not sym:
+        raise HTTPException(status_code=400, detail="ticker requerido")
+    now = time.time()
+    hit = _HIST_ANALYSIS_CACHE.get(sym.upper())
+    if hit and now - hit[0] < _HIST_ANALYSIS_TTL_SEC:
+        return copy.deepcopy(hit[1])
+    try:
+        payload = _historical_analysis_payload(sym)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=404, detail=f"Sin análisis: {e!s}") from e
+    _HIST_ANALYSIS_CACHE[sym.upper()] = (now, copy.deepcopy(payload))
+    return copy.deepcopy(payload)
+
+
+def _quarterly_row_series(
+    df: pd.DataFrame | None, row_names: list[str]
+) -> pd.Series | None:
+    if df is None or df.empty:
+        return None
+    for name in row_names:
+        if name in df.index:
+            return df.loc[name]
+    return None
+
+
+def _earnings_surprise_block(t: Any, n: int = 8) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    try:
+        df = getattr(t, "earnings_dates", None)
+        if df is None or (hasattr(df, "empty") and df.empty):
+            return out
+        df = df.copy()
+        df = df.sort_index(ascending=False).head(n)
+        for idx, row in df.iterrows():
+            try:
+                lab = pd.Timestamp(idx).strftime("%Y-%m-%d")
+            except Exception:
+                lab = str(idx)[:16]
+            est = _safe_float(row["EPS Estimate"] if "EPS Estimate" in row.index else None)
+            act = _safe_float(row["Reported EPS"] if "Reported EPS" in row.index else None)
+            sur = _safe_float(row["Surprise(%)"] if "Surprise(%)" in row.index else None)
+            out.append(
+                {
+                    "periodo": lab,
+                    "estimate": est,
+                    "actual": act,
+                    "surprise_pct": sur,
+                }
+            )
+    except Exception:
+        return out
+    return out
+
+
+def _next_earnings_meta(info: dict[str, Any], t: Any) -> tuple[Optional[str], Optional[float]]:
+    next_dt: Optional[str] = None
+    est: Optional[float] = None
+    ts = info.get("earningsTimestamp")
+    if ts is not None:
+        try:
+            next_dt = pd.Timestamp(ts, unit="s", tz="UTC").strftime("%Y-%m-%d")
+        except Exception:
+            try:
+                next_dt = str(pd.Timestamp(ts))[:10]
+            except Exception:
+                next_dt = None
+    if next_dt is None:
+        try:
+            cal = getattr(t, "calendar", None)
+            if cal is not None and not getattr(cal, "empty", True):
+                if isinstance(cal, pd.DataFrame) and "Earnings Date" in cal.index:
+                    raw = cal.loc["Earnings Date"].iloc[0]
+                    next_dt = str(pd.Timestamp(raw))[:10]
+        except Exception:
+            pass
+    est = _safe_float(info.get("forwardEps"))
+    return next_dt, est
+
+
+def _quarterly_metrics_pack(
+    t: Any, n: int = 8
+) -> tuple[
+    list[str],
+    list[float | None],
+    list[float | None],
+    list[float | None],
+    list[float | None],
+]:
+    qf = getattr(t, "quarterly_financials", None)
+    if qf is None or getattr(qf, "empty", True):
+        return [], [], [], [], []
+    cols = list(qf.columns)[:n]
+    periods: list[str] = []
+    for c in cols:
+        try:
+            periods.append(pd.Timestamp(c).strftime("%Y-%m-%d"))
+        except Exception:
+            periods.append(str(c)[:16])
+
+    def col_vals(df: pd.DataFrame | None, names: list[str]) -> list[float | None]:
+        s = _quarterly_row_series(df, names)
+        if s is None:
+            return [None] * len(cols)
+        out: list[float | None] = []
+        for c in cols:
+            if c not in s.index:
+                out.append(None)
+            else:
+                out.append(_safe_float(s.loc[c]))
+        return out
+
+    rev = col_vals(qf, ["Total Revenue", "Revenue"])
+    earn = col_vals(qf, ["Net Income"])
+    qcf = getattr(t, "quarterly_cashflow", None)
+    fcf = col_vals(qcf, ["Free Cash Flow"])
+    qbs = getattr(t, "quarterly_balance_sheet", None)
+    debt = col_vals(qbs, ["Total Debt", "Long Term Debt"])
+    return periods, rev, earn, fcf, debt
+
+
 @router.get("/financials/{symbol:path}")
 def market_financials(symbol: str) -> dict[str, Any]:
     sym = normalize_ticker(symbol.strip())
@@ -938,6 +1264,10 @@ def market_financials(symbol: str) -> dict[str, Any]:
     dcf_ev_20 = _calc_dcf_20y(fcf_latest, rev_growth)
     dcf_terminal = _calc_dcf_20y(fcf_latest, rev_growth, terminal_growth=0.03)
 
+    q_per, q_rev, q_earn, q_fcf, q_debt = _quarterly_metrics_pack(t, 8)
+    earn_surp = _earnings_surprise_block(t, 8)
+    next_earn, next_est = _next_earnings_meta(info, t)
+
     to_per_share = (
         lambda v: (v / shares) if (v is not None and shares and shares > 0) else None
     )
@@ -963,9 +1293,112 @@ def market_financials(symbol: str) -> dict[str, Any]:
             "mean_pb": val_mean_pb,
             "precio_actual": price_now,
         },
+        "quarterly_periods": q_per,
+        "quarterly_revenue": q_rev,
+        "quarterly_earnings": q_earn,
+        "quarterly_fcf": q_fcf,
+        "quarterly_debt": q_debt,
+        "earnings_surprise": earn_surp,
+        "next_earnings_date": next_earn,
+        "next_earnings_estimate": next_est,
     }
     _FINANCIALS_CACHE[sym.upper()] = (now, copy.deepcopy(payload))
     return payload
+
+
+_BENCHMARK_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_BENCHMARK_TTL_SEC = 300.0
+
+
+@router.get("/benchmark")
+def market_benchmark(
+    symbols: str = Query("SPY", description="Símbolo (primero de la lista)"),
+    period: str = Query(
+        "6mo",
+        description="Período yfinance: 1d,5d,1mo,3mo,6mo,1y,2y,5y,ytd,max",
+    ),
+) -> dict[str, Any]:
+    """Retorno % del benchmark en el período (primera cotización vs última)."""
+    raw = (symbols or "SPY").split(",")[0].strip()
+    sym = normalize_ticker(raw)
+    if not sym:
+        raise HTTPException(status_code=400, detail="símbolo requerido")
+    cache_key = f"{sym.upper()}|{period}"
+    now = time.time()
+    hit = _BENCHMARK_CACHE.get(cache_key)
+    if hit and now - hit[0] < _BENCHMARK_TTL_SEC:
+        return copy.deepcopy(hit[1])
+    try:
+        t = yf.Ticker(sym)
+        hist = t.history(period=period, interval="1d")
+        if hist is None or hist.empty:
+            raise ValueError("sin datos")
+        close = hist["Close"].astype(float)
+        first = float(close.iloc[0])
+        last = float(close.iloc[-1])
+        ret_pct = ((last - first) / first * 100.0) if first else 0.0
+        payload = {
+            "symbol": sym,
+            "period": period,
+            "returnPct": round(ret_pct, 2),
+            "firstClose": round(first, 6),
+            "lastClose": round(last, 6),
+        }
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=404, detail=f"Benchmark sin datos: {e!s}") from e
+    _BENCHMARK_CACHE[cache_key] = (now, copy.deepcopy(payload))
+    return copy.deepcopy(payload)
+
+
+_DIVIDENDS_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_DIVIDENDS_TTL_SEC = 3600.0
+
+
+@router.get("/dividends/{symbol:path}")
+def market_dividends(symbol: str) -> dict[str, Any]:
+    """Últimos dividendos (hasta 4 trimestres) y metadatos desde yfinance."""
+    sym = normalize_ticker(symbol.strip())
+    if not sym:
+        raise HTTPException(status_code=400, detail="ticker requerido")
+    now = time.time()
+    hit = _DIVIDENDS_CACHE.get(sym.upper())
+    if hit and now - hit[0] < _DIVIDENDS_TTL_SEC:
+        return copy.deepcopy(hit[1])
+    try:
+        t = yf.Ticker(sym)
+        div = t.dividends
+        rows: list[dict[str, Any]] = []
+        if div is not None and len(div) > 0:
+            tail = div.tail(4)
+            for idx, val in tail.items():
+                ts = idx.isoformat() if hasattr(idx, "isoformat") else str(idx)
+                rows.append({"fecha": ts, "monto": float(val)})
+        info = t.info or {}
+        dy = info.get("dividendYield")
+        yield_anual: Optional[float] = None
+        if dy is not None:
+            try:
+                yf_val = float(dy)
+                yield_anual = yf_val * 100.0 if yf_val <= 1.0 else yf_val
+            except (TypeError, ValueError):
+                yield_anual = None
+        ex_raw = info.get("exDividendDate")
+        proximo: Optional[str] = None
+        if ex_raw is not None:
+            try:
+                proximo = pd.Timestamp(ex_raw).isoformat()
+            except Exception:
+                proximo = str(ex_raw)
+        payload = {
+            "symbol": sym,
+            "dividendos": rows,
+            "yield_anual": round(yield_anual, 2) if yield_anual is not None else None,
+            "proximo_dividendo": proximo,
+        }
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=404, detail=f"Dividendos no disponibles: {e!s}") from e
+    _DIVIDENDS_CACHE[sym.upper()] = (now, copy.deepcopy(payload))
+    return copy.deepcopy(payload)
 
 
 @router.get("/quote/{symbol:path}")

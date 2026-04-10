@@ -188,9 +188,9 @@ export function Admin() {
               </strong>
             </div>
             <div className="admin-stat-card">
-              <span className="admin-stat-label">Plan Pro</span>
+              <span className="admin-stat-label">Plan Weekly</span>
               <strong className="admin-stat-value">
-                {stats.users_by_plan.pro ?? 0}
+                {(stats.users_by_plan.weekly ?? 0) + (stats.users_by_plan.pro ?? 0)}
               </strong>
             </div>
           </div>
@@ -220,7 +220,8 @@ export function Admin() {
               >
                 <option value="">Todos</option>
                 <option value="free">free</option>
-                <option value="pro">pro</option>
+                <option value="weekly">weekly</option>
+                <option value="pro">pro (legacy)</option>
               </select>
             </label>
             <label>

@@ -8,6 +8,9 @@ import {
   ColorType,
   createChart,
   CandlestickSeries,
+  HistogramSeries,
+  LineSeries,
+  LineStyle,
   type UTCTimestamp,
 } from 'lightweight-charts'
 import {
@@ -28,10 +31,11 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { exportActivoPdf } from '../lib/exportActivoPdf'
 import { useFavoritos } from '../hooks/useFavoritos'
+import { computeIndicatorData } from '../lib/technicalIndicators'
 
 const API = import.meta.env.VITE_API_URL ?? ''
 
-type ChartRange = '1M' | '3M' | '6M' | '1Y'
+type ChartRange = '1D' | '1W' | '1M' | '3M' | '6M' | '1Y' | '5Y'
 
 type AssetBar = {
   time: number
@@ -73,15 +77,15 @@ type AssetPayload = {
   volume: number
   rsi14: number | null
   macd: {
-    linea: number
-    senal: number
-    histograma: number
+    linea: number | null
+    senal: number | null
+    histograma: number | null
     direccion: string
   }
   bollinger: {
-    superior: number
-    media: number
-    inferior: number
+    superior: number | null
+    media: number | null
+    inferior: number | null
     precio_vs_bandas: string
   }
   ma20: number | null
@@ -165,9 +169,76 @@ type FinancialsPayload = {
     mean_pb?: number | null
     precio_actual?: number | null
   }
+  quarterly_periods?: string[]
+  quarterly_revenue?: Array<number | null>
+  quarterly_earnings?: Array<number | null>
+  quarterly_fcf?: Array<number | null>
+  quarterly_debt?: Array<number | null>
+  earnings_surprise?: Array<{
+    periodo: string
+    estimate: number | null
+    actual: number | null
+    surprise_pct: number | null
+  }>
+  next_earnings_date?: string | null
+  next_earnings_estimate?: number | null
 }
 
-const RANGES: ChartRange[] = ['1M', '3M', '6M', '1Y']
+type HistoricalAnalysisPayload = {
+  symbol: string
+  nombre?: string
+  precio_actual?: number
+  caidas_historicas: Array<{
+    peak_date: string
+    trough_date: string
+    drawdown_pct: number
+    umbrales: string[]
+    rebote_3m_pct: number | null
+    rebote_6m_pct: number | null
+    rebote_12m_pct: number | null
+  }>
+  soportes: number[]
+  resistencias: number[]
+  max_drawdown: number
+  insight_claude: string
+  precio_vs_historico: {
+    vs_maximo_5y: number | null
+    vs_minimo_5y: number | null
+    percentil_historico: number | null
+  }
+}
+
+type IndicatorToggles = {
+  volume: boolean
+  rsi: boolean
+  macd: boolean
+  bollinger: boolean
+  ma20: boolean
+  ma50: boolean
+  ma200: boolean
+}
+
+const RANGES: ChartRange[] = ['1D', '1W', '1M', '3M', '6M', '1Y', '5Y']
+
+const DEFAULT_INDICATORS: IndicatorToggles = {
+  volume: true,
+  rsi: false,
+  macd: false,
+  bollinger: false,
+  ma20: true,
+  ma50: true,
+  ma200: false,
+}
+
+const INDICATOR_PILLS: { key: keyof IndicatorToggles; label: string }[] = [
+  { key: 'volume', label: 'Volumen' },
+  { key: 'ma20', label: 'MA 20' },
+  { key: 'ma50', label: 'MA 50' },
+  { key: 'ma200', label: 'MA 200' },
+  { key: 'bollinger', label: 'Bollinger' },
+  { key: 'rsi', label: 'RSI (14)' },
+  { key: 'macd', label: 'MACD' },
+]
 
 const GAIN = '#0a7c52'
 const LOSS = '#c0293e'
@@ -304,13 +375,19 @@ export function Activo() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [assetNotFound, setAssetNotFound] = useState(false)
+  const [indicators, setIndicators] = useState<IndicatorToggles>({
+    ...DEFAULT_INDICATORS,
+  })
   const chartRef = useRef<HTMLDivElement>(null)
   const incomeChartRef = useRef<HTMLDivElement>(null)
   const cashflowChartRef = useRef<HTMLDivElement>(null)
   const valuationChartRef = useRef<HTMLDivElement>(null)
   const chartApiRef = useRef<ReturnType<typeof createChart> | null>(null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const seriesRef = useRef<any>(null)
+  const [histAnalysis, setHistAnalysis] = useState<HistoricalAnalysisPayload | null>(
+    null,
+  )
+  const [histLoading, setHistLoading] = useState(false)
+  const [histErr, setHistErr] = useState<string | null>(null)
 
   const [fundIa, setFundIa] = useState<FundamentalIaResponse | null>(null)
   const [fundIaLoading, setFundIaLoading] = useState(false)
@@ -390,6 +467,38 @@ export function Activo() {
       })
       .finally(() => {
         if (!cancelled) setNewsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [data?.symbol])
+
+  useEffect(() => {
+    if (!data?.symbol) return
+    let cancelled = false
+    setHistLoading(true)
+    setHistErr(null)
+    setHistAnalysis(null)
+    void fetch(
+      `${API}/api/market/historical-analysis/${encodeURIComponent(data.symbol)}`,
+    )
+      .then(async (res) => {
+        if (!res.ok) {
+          const t = await res.text()
+          throw new Error(t || `HTTP ${res.status}`)
+        }
+        return (await res.json()) as HistoricalAnalysisPayload
+      })
+      .then((j) => {
+        if (!cancelled) setHistAnalysis(j)
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setHistErr(e instanceof Error ? e.message : 'No disponible')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setHistLoading(false)
       })
     return () => {
       cancelled = true
@@ -606,80 +715,311 @@ Descripción: ${n.descripcion || ''}`,
     }
   }
 
+  const bars = data?.bars
+  const srSupKey = histAnalysis?.soportes?.join(',') ?? ''
+  const srResKey = histAnalysis?.resistencias?.join(',') ?? ''
+
   useEffect(() => {
     const el = chartRef.current
-    if (!el || !data?.bars?.length) {
-      if (chartApiRef.current) {
-        chartApiRef.current.remove()
-        chartApiRef.current = null
-        seriesRef.current = null
-      }
+    if (!el || !bars?.length) {
+      chartApiRef.current?.remove()
+      chartApiRef.current = null
       return undefined
     }
 
-    const grid = 'rgba(0, 0, 0, 0.06)'
+    const ind = indicators
+    const showVol = ind.volume
+    const showRsi = ind.rsi
+    const showMacd = ind.macd
 
-    if (!chartApiRef.current) {
-      const chart = createChart(el, {
-        layout: {
-          background: { type: ColorType.Solid, color: 'transparent' },
-          textColor: 'rgba(26, 28, 32, 0.75)',
-        },
-        grid: {
-          vertLines: { color: grid },
-          horzLines: { color: grid },
-        },
-        width: el.clientWidth,
-        height: 380,
-        rightPriceScale: { borderVisible: false },
-        timeScale: { borderVisible: false },
-      })
-      const series = chart.addSeries(CandlestickSeries, {
+    const MAIN_H = 320
+    const ROW_VOL = showVol ? 72 : 0
+    const ROW_RSI = showRsi ? 84 : 0
+    const ROW_MACD = showMacd ? 100 : 0
+    const totalH = MAIN_H + ROW_VOL + ROW_RSI + ROW_MACD
+
+    el.style.height = `${totalH}px`
+
+    chartApiRef.current?.remove()
+    chartApiRef.current = null
+
+    const grid = 'rgba(0, 0, 0, 0.06)'
+    const chart = createChart(el, {
+      layout: {
+        background: { type: ColorType.Solid, color: 'transparent' },
+        textColor: 'rgba(26, 28, 32, 0.75)',
+      },
+      grid: {
+        vertLines: { color: grid },
+        horzLines: { color: grid },
+      },
+      width: el.clientWidth,
+      height: totalH,
+      rightPriceScale: { borderVisible: false },
+      timeScale: { borderVisible: false },
+    })
+    chartApiRef.current = chart
+
+    const candle = chart.addSeries(
+      CandlestickSeries,
+      {
         upColor: GAIN,
         downColor: LOSS,
         borderUpColor: GAIN,
         borderDownColor: LOSS,
         wickUpColor: GAIN,
         wickDownColor: LOSS,
-      })
-      chartApiRef.current = chart
-      seriesRef.current = series
-    }
+      },
+      0,
+    )
 
-    const chart = chartApiRef.current
-    const series = seriesRef.current
-    if (!chart || !series) return
-
-    const candleData = data.bars.map((b) => ({
+    const candleData = bars.map((b) => ({
       time: b.time as UTCTimestamp,
       open: b.open,
       high: b.high,
       low: b.low,
       close: b.close,
     }))
-    series.setData(candleData)
+    candle.setData(candleData)
+
+    const comp = computeIndicatorData(bars)
+
+    const ma20S = chart.addSeries(
+      LineSeries,
+      {
+        color: '#2563eb',
+        lineWidth: 2,
+        visible: ind.ma20,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      },
+      0,
+    )
+    ma20S.setData(comp.ma20)
+
+    const ma50S = chart.addSeries(
+      LineSeries,
+      {
+        color: '#ea580c',
+        lineWidth: 2,
+        visible: ind.ma50,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      },
+      0,
+    )
+    ma50S.setData(comp.ma50)
+
+    const ma200S = chart.addSeries(
+      LineSeries,
+      {
+        color: '#dc2626',
+        lineWidth: 2,
+        visible: ind.ma200,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      },
+      0,
+    )
+    ma200S.setData(comp.ma200)
+
+    const bbU = chart.addSeries(
+      LineSeries,
+      {
+        color: 'rgba(147, 51, 234, 0.5)',
+        lineWidth: 1,
+        visible: ind.bollinger,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      },
+      0,
+    )
+    bbU.setData(comp.bbUpper)
+    const bbM = chart.addSeries(
+      LineSeries,
+      {
+        color: 'rgba(147, 51, 234, 0.3)',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dotted,
+        visible: ind.bollinger,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      },
+      0,
+    )
+    bbM.setData(comp.bbMid)
+    const bbL = chart.addSeries(
+      LineSeries,
+      {
+        color: 'rgba(147, 51, 234, 0.5)',
+        lineWidth: 1,
+        visible: ind.bollinger,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      },
+      0,
+    )
+    bbL.setData(comp.bbLower)
+
+    const supports = histAnalysis?.soportes ?? []
+    const resists = histAnalysis?.resistencias ?? []
+    for (const px of supports) {
+      candle.createPriceLine({
+        price: px,
+        color: 'rgba(10, 124, 82, 0.9)',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dotted,
+        axisLabelVisible: true,
+        title: '',
+      })
+    }
+    for (const px of resists) {
+      candle.createPriceLine({
+        price: px,
+        color: 'rgba(192, 41, 62, 0.85)',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dotted,
+        axisLabelVisible: true,
+        title: '',
+      })
+    }
+
+    let paneIdx = 1
+    if (showVol) {
+      chart.addPane()
+      chart.panes()[paneIdx]?.setHeight(ROW_VOL)
+      const volS = chart.addSeries(
+        HistogramSeries,
+        {
+          priceFormat: { type: 'volume' },
+          priceScaleId: 'left',
+          color: GAIN,
+        },
+        paneIdx,
+      )
+      volS.setData(
+        bars.map((b) => ({
+          time: b.time as UTCTimestamp,
+          value: b.volume,
+          color:
+            b.close >= b.open
+              ? 'rgba(10, 124, 82, 0.55)'
+              : 'rgba(192, 41, 62, 0.55)',
+        })),
+      )
+      paneIdx += 1
+    }
+    if (showRsi) {
+      chart.addPane()
+      chart.panes()[paneIdx]?.setHeight(ROW_RSI)
+      const rsiS = chart.addSeries(
+        LineSeries,
+        {
+          color: '#7c3aed',
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: true,
+        },
+        paneIdx,
+      )
+      rsiS.setData(comp.rsi)
+      paneIdx += 1
+    }
+    if (showMacd) {
+      chart.addPane()
+      chart.panes()[paneIdx]?.setHeight(ROW_MACD)
+      const macdHistS = chart.addSeries(
+        HistogramSeries,
+        {
+          priceFormat: { type: 'price', precision: 4, minMove: 0.0001 },
+          priceScaleId: 'left',
+        },
+        paneIdx,
+      )
+      macdHistS.setData(comp.macdHist)
+      const mLine = chart.addSeries(
+        LineSeries,
+        {
+          color: '#2563eb',
+          lineWidth: 1,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        },
+        paneIdx,
+      )
+      mLine.setData(comp.macdLine)
+      const mSig = chart.addSeries(
+        LineSeries,
+        {
+          color: '#ea580c',
+          lineWidth: 1,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        },
+        paneIdx,
+      )
+      mSig.setData(comp.macdSignal)
+      paneIdx += 1
+    }
+
+    chart.panes()[0]?.setHeight(MAIN_H)
     chart.timeScale().fitContent()
 
     const ro = new ResizeObserver(() => {
       if (!chartRef.current || !chartApiRef.current) return
-      chartApiRef.current.resize(
-        chartRef.current.clientWidth,
-        380,
-      )
+      chartApiRef.current.resize(chartRef.current.clientWidth, totalH)
     })
     ro.observe(el)
     return () => {
       ro.disconnect()
     }
-  }, [data])
+  }, [bars, indicators, srSupKey, srResKey])
 
   useEffect(() => {
     return () => {
       chartApiRef.current?.remove()
       chartApiRef.current = null
-      seriesRef.current = null
     }
   }, [])
+
+  const toggleIndicator = (key: keyof IndicatorToggles) => {
+    setIndicators((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  const earningsQuarterlyRows =
+    financials?.quarterly_periods?.map((period, i) => {
+      const e = financials.quarterly_earnings?.[i] ?? null
+      const surpr =
+        financials.earnings_surprise?.find((s) => {
+          const a = s.periodo.slice(0, 7)
+          const b = period.slice(0, 7)
+          return a === b || s.periodo.startsWith(b) || period.startsWith(a)
+        })?.surprise_pct ?? null
+      return {
+        key: period,
+        label: period.length >= 10 ? period.slice(0, 7) : period,
+        earnings: e,
+        surprise_pct: surpr,
+      }
+    }) ?? []
+
+  const pvc5 = histAnalysis?.precio_vs_historico
+  const hi5est =
+    data && pvc5?.vs_maximo_5y != null && Number.isFinite(pvc5.vs_maximo_5y)
+      ? data.price / (1 + pvc5.vs_maximo_5y / 100)
+      : null
+  const lo5est =
+    data && pvc5?.vs_minimo_5y != null && Number.isFinite(pvc5.vs_minimo_5y)
+      ? data.price / (1 + pvc5.vs_minimo_5y / 100)
+      : null
+  const range5Marker =
+    hi5est != null &&
+    lo5est != null &&
+    hi5est > lo5est &&
+    data &&
+    Number.isFinite(data.price)
+      ? ((data.price - lo5est) / (hi5est - lo5est)) * 100
+      : null
 
   const pos = data ? data.changePct >= 0 : false
   const zone = rsiZone(data?.rsi14 ?? null)
@@ -890,8 +1230,161 @@ Descripción: ${n.descripcion || ''}`,
                 </button>
               ))}
             </div>
+            <div className="indicator-toggles" role="group" aria-label="Indicadores del gráfico">
+              {INDICATOR_PILLS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`indicator-pill ${indicators[key] ? 'active' : ''}`}
+                  aria-pressed={indicators[key]}
+                  onClick={() => toggleIndicator(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <div ref={chartRef} className="activo-chart" />
           </div>
+
+          <section className="activo-historical-context" aria-labelledby="hist-ctx-h">
+            <h2 id="hist-ctx-h" className="dash-zone-title">
+              Contexto histórico
+            </h2>
+            {histLoading ? (
+              <p className="page-sub font-prose">Analizando 5 años de historia…</p>
+            ) : null}
+            {histErr ? <p className="page-sub font-prose">{histErr}</p> : null}
+            {histAnalysis ? (
+              <>
+                <div className="historical-insight-card font-prose">
+                  {histAnalysis.insight_claude}
+                </div>
+                {lo5est != null &&
+                hi5est != null &&
+                range5Marker != null &&
+                data &&
+                pvc5?.percentil_historico != null ? (
+                  <div className="activo-historical-range-block">
+                    <div className="support-resistance-bar" aria-hidden>
+                      <div className="support-resistance-bar-track">
+                        <span
+                          className="support-resistance-bar-marker"
+                          style={{
+                            left: `${Math.min(100, Math.max(0, range5Marker))}%`,
+                          }}
+                        />
+                      </div>
+                      <div className="support-resistance-bar-labels font-prose">
+                        <span>
+                          Mín. 5y ~{' '}
+                          {lo5est.toLocaleString('es-AR', { maximumFractionDigits: 2 })}
+                        </span>
+                        <span>
+                          Máx. 5y ~{' '}
+                          {hi5est.toLocaleString('es-AR', { maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="font-prose activo-percentil-copy">
+                      El papel está en el percentil{' '}
+                      <strong>{pvc5.percentil_historico.toFixed(1)}</strong> de precio
+                      histórico de los últimos 5 años (según cierres diarios).
+                    </p>
+                    <div className="percentil-bar" aria-hidden>
+                      <div
+                        className="percentil-bar-fill"
+                        style={{
+                          width: `${Math.min(100, Math.max(0, pvc5.percentil_historico))}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+                {histAnalysis.caidas_historicas?.length ? (
+                  <details className="activo-caidas-details font-prose">
+                    <summary>Caídas significativas y rebotes posteriores</summary>
+                    <ul className="activo-caidas-list">
+                      {histAnalysis.caidas_historicas.slice(0, 8).map((c, i) => (
+                        <li key={`${c.trough_date}-${i}`}>
+                          {c.trough_date}: {c.drawdown_pct.toFixed(1)}% (
+                          {c.umbrales.join(', ')}) · rebote 6m:{' '}
+                          {c.rebote_6m_pct != null
+                            ? `${c.rebote_6m_pct.toFixed(1)}%`
+                            : '—'}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : null}
+              </>
+            ) : null}
+          </section>
+
+          {financials?.quarterly_periods && financials.quarterly_periods.length > 0 ? (
+            <section className="activo-earnings" aria-labelledby="earn-h">
+              <h2 id="earn-h" className="dash-zone-title">
+                Earnings trimestrales
+              </h2>
+              <p className="chart-subtitle font-prose">
+                {financials.next_earnings_date
+                  ? `Próximo earnings (ref.): ${financials.next_earnings_date}`
+                  : null}
+                {financials.next_earnings_date && financials.next_earnings_estimate != null
+                  ? ' · '
+                  : ''}
+                {financials.next_earnings_estimate != null
+                  ? `Estimado EPS forward (ref.): ${financials.next_earnings_estimate.toFixed(2)}`
+                  : null}
+              </p>
+              <div className="earnings-chart chart-container">
+                <ResponsiveContainer width="100%" height={300}>
+                  <ComposedChart
+                    data={earningsQuarterlyRows}
+                    margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.08)" />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                    <YAxis yAxisId="left" tickFormatter={(v) => fmtBig(v)} width={56} />
+                    <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => `${v}%`} width={40} />
+                    <Tooltip
+                      formatter={(v, name) =>
+                        name === 'Sorpresa %' && typeof v === 'number'
+                          ? `${v.toFixed(2)}%`
+                          : fmtBig(Number(v))
+                      }
+                    />
+                    <Legend />
+                    <Bar yAxisId="left" dataKey="earnings" name="Net income (trim.)" fill="#047857">
+                      {earningsQuarterlyRows.map((row) => {
+                        const sp = row.surprise_pct
+                        const col =
+                          sp == null
+                            ? '#047857'
+                            : sp >= 0
+                              ? '#0a7c52'
+                              : '#c0293e'
+                        return <Cell key={row.key} fill={col} />
+                      })}
+                    </Bar>
+                    <Line
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="surprise_pct"
+                      name="Sorpresa %"
+                      stroke="#7c3aed"
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                      connectNulls
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+                <p className="page-sub font-prose earnings-surprise-legend">
+                  Barras: beneficio neto trimestral (color verde/rojo si hay dato de sorpresa en ese
+                  período). Línea morada: sorpresa % reportada vs estimado (cuando yfinance la expone).
+                </p>
+              </div>
+            </section>
+          ) : null}
 
           <section className="activo-indicadores" aria-labelledby="ind-h">
             <h2 id="ind-h" className="dash-zone-title">
@@ -925,13 +1418,23 @@ Descripción: ${n.descripcion || ''}`,
                 <h3 className="activo-ind-title">MACD (12,26,9)</h3>
                 <div className="scanner-pills">
                   <span className="scanner-pill">
-                    Línea {data.macd.linea.toFixed(4)}
+                    Línea{' '}
+                    {data.macd.linea != null && Number.isFinite(data.macd.linea)
+                      ? data.macd.linea.toFixed(4)
+                      : '—'}
                   </span>
                   <span className="scanner-pill">
-                    Señal {data.macd.senal.toFixed(4)}
+                    Señal{' '}
+                    {data.macd.senal != null && Number.isFinite(data.macd.senal)
+                      ? data.macd.senal.toFixed(4)
+                      : '—'}
                   </span>
                   <span className="scanner-pill">
-                    Hist. {data.macd.histograma.toFixed(4)}
+                    Hist.{' '}
+                    {data.macd.histograma != null &&
+                    Number.isFinite(data.macd.histograma)
+                      ? data.macd.histograma.toFixed(4)
+                      : '—'}
                   </span>
                   <span className="scanner-pill">{data.macd.direccion}</span>
                 </div>
@@ -940,9 +1443,20 @@ Descripción: ${n.descripcion || ''}`,
               <article className="scanner-card activo-ind-card">
                 <h3 className="activo-ind-title">Bollinger (20, 2σ)</h3>
                 <p className="font-prose activo-ind-line">
-                  Sup. {data.bollinger.superior.toFixed(4)} · Media{' '}
-                  {data.bollinger.media.toFixed(4)} · Inf.{' '}
-                  {data.bollinger.inferior.toFixed(4)}
+                  Sup.{' '}
+                  {data.bollinger.superior != null &&
+                  Number.isFinite(data.bollinger.superior)
+                    ? data.bollinger.superior.toFixed(4)
+                    : '—'}{' '}
+                  · Media{' '}
+                  {data.bollinger.media != null && Number.isFinite(data.bollinger.media)
+                    ? data.bollinger.media.toFixed(4)
+                    : '—'}{' '}
+                  · Inf.{' '}
+                  {data.bollinger.inferior != null &&
+                  Number.isFinite(data.bollinger.inferior)
+                    ? data.bollinger.inferior.toFixed(4)
+                    : '—'}
                 </p>
                 <p className="scanner-pill activo-bb-vs">
                   Precio: {data.bollinger.precio_vs_bandas.replace(/_/g, ' ')}

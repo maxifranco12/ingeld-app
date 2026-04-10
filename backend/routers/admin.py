@@ -19,7 +19,7 @@ router = APIRouter()
 class AdminUserUpdateBody(BaseModel):
     is_active: Optional[bool] = None
     is_admin: Optional[bool] = None
-    plan: Optional[Literal["free", "pro"]] = None
+    plan: Optional[Literal["free", "weekly"]] = None
 
 
 def _user_list_row(u: User) -> dict[str, Any]:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, create_engine
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, Text, create_engine
 from sqlalchemy.orm import Session, declarative_base, relationship, sessionmaker
 
 DB_PATH = Path(__file__).resolve().parent / "ingeld.db"
@@ -86,6 +86,44 @@ class AnalysisHistory(Base):
     señal = Column(String(16), nullable=True)
     resumen = Column(Text, nullable=False)
     score_total = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class Goal(Base):
+    __tablename__ = "goals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    nombre = Column(String(255), nullable=False)
+    monto_objetivo = Column(Float, nullable=False)
+    monto_actual = Column(Float, nullable=False, default=0.0)
+    moneda = Column(String(8), default="USD", nullable=False)
+    fecha_objetivo = Column(Date, nullable=True)
+    color = Column(String(16), default="#00a87a", nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class Asset(Base):
+    __tablename__ = "net_assets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    nombre = Column(String(255), nullable=False)
+    tipo = Column(String(32), nullable=False)
+    valor = Column(Float, nullable=False)
+    moneda = Column(String(8), default="USD", nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class Liability(Base):
+    __tablename__ = "net_liabilities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    nombre = Column(String(255), nullable=False)
+    tipo = Column(String(32), nullable=False)
+    monto = Column(Float, nullable=False)
+    moneda = Column(String(8), default="USD", nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 

@@ -1,28 +1,37 @@
 import { useEffect, useRef, useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { TickerTape } from './TickerTape'
 
-const nav: { to: string; label: string; end?: boolean }[] = [
+const navBeforePf: { to: string; label: string; end?: boolean }[] = [
   { to: '/panel', label: 'Panel', end: true },
   { to: '/buscador', label: 'Buscador' },
   { to: '/scanner', label: 'Scanner' },
   { to: '/favoritos', label: 'Favoritos' },
-  { to: '/portfolio', label: 'Portfolio' },
+]
+
+const navAfterPf: { to: string; label: string; end?: boolean }[] = [
   { to: '/alertas', label: 'Alertas' },
   { to: '/analisis', label: 'Análisis' },
   { to: '/comparador', label: 'Comparador' },
 ]
 
+const PF_ROUTES = ['/portfolio', '/metas', '/networth']
+
 export function Layout() {
   const { user, isAuthenticated, isAdmin, logout } = useAuth()
   const navigate = useNavigate()
+  const loc = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const [pfOpen, setPfOpen] = useState(false)
+  const pfRef = useRef<HTMLDivElement>(null)
+  const pfNavActive = PF_ROUTES.some((p) => loc.pathname === p || loc.pathname.startsWith(`${p}/`))
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
       if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false)
+      if (!pfRef.current?.contains(e.target as Node)) setPfOpen(false)
     }
     document.addEventListener('click', close)
     return () => document.removeEventListener('click', close)
@@ -37,7 +46,56 @@ export function Layout() {
         </NavLink>
         <div className="header-trailing">
           <nav className="nav" aria-label="Principal">
-            {nav.map(({ to, label, end }) => (
+            {navBeforePf.map(({ to, label, end }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={Boolean(end)}
+                className={({ isActive }) => (isActive ? 'active' : undefined)}
+              >
+                {label}
+              </NavLink>
+            ))}
+            <div className="nav-dropdown" ref={pfRef}>
+              <button
+                type="button"
+                className={['nav-dropdown-trigger', pfNavActive ? 'active' : ''].filter(Boolean).join(' ')}
+                aria-expanded={pfOpen}
+                aria-haspopup="true"
+                onClick={() => setPfOpen((v) => !v)}
+              >
+                Portfolio <span aria-hidden>▾</span>
+              </button>
+              {pfOpen ? (
+                <div className="nav-dropdown-menu" role="menu">
+                  <NavLink
+                    to="/portfolio"
+                    className={({ isActive }) => (isActive ? 'active' : undefined)}
+                    role="menuitem"
+                    onClick={() => setPfOpen(false)}
+                  >
+                    Mi Portfolio
+                  </NavLink>
+                  <NavLink
+                    to="/metas"
+                    className={({ isActive }) => (isActive ? 'active' : undefined)}
+                    role="menuitem"
+                    onClick={() => setPfOpen(false)}
+                  >
+                    Metas
+                  </NavLink>
+                  <NavLink
+                    to="/networth"
+                    className={({ isActive }) => (isActive ? 'active' : undefined)}
+                    role="menuitem"
+                    onClick={() => setPfOpen(false)}
+                  >
+                    Patrimonio Neto
+                  </NavLink>
+                </div>
+              ) : null}
+            </div>
+            {navAfterPf.map(({ to, label, end }) => (
               <NavLink
                 key={to}
                 to={to}

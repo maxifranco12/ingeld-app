@@ -67,8 +67,18 @@ type ExportActivoPdfInput = {
   changePct: number
   volume: number
   rsi14: number | null
-  macd: { linea: number; senal: number; histograma: number; direccion: string }
-  bollinger: { superior: number; media: number; inferior: number; precio_vs_bandas: string }
+  macd: {
+    linea: number | null
+    senal: number | null
+    histograma: number | null
+    direccion: string
+  }
+  bollinger: {
+    superior: number | null
+    media: number | null
+    inferior: number | null
+    precio_vs_bandas: string
+  }
   ma20: number | null
   ma50: number | null
   precioVsMa20: string

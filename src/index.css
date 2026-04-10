@@ -2136,11 +2136,132 @@ button {
 
 .activo-chart {
   width: 100%;
-  height: 380px;
+  min-height: 320px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
   overflow: hidden;
   background: transparent;
+}
+
+.indicator-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.55rem;
+}
+
+.indicator-pill {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.28rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.indicator-pill.active {
+  background: rgba(0, 168, 122, 0.18);
+  border-color: rgba(0, 168, 122, 0.55);
+  color: var(--accent);
+}
+
+.chart-panel {
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.activo-historical-context {
+  margin-bottom: 1.5rem;
+}
+
+.historical-insight-card {
+  background: linear-gradient(135deg, rgba(0, 168, 122, 0.12), rgba(0, 168, 122, 0.04));
+  border: 1px solid rgba(0, 168, 122, 0.35);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  margin: 0.75rem 0 1rem;
+  color: var(--text-heading);
+  line-height: 1.55;
+}
+
+.support-resistance-bar {
+  margin: 0.75rem 0 0.5rem;
+}
+
+.support-resistance-bar-track {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--loss-muted, rgba(192, 41, 62, 0.2)), var(--gain-muted, rgba(10, 124, 82, 0.25)));
+  border: 1px solid var(--border);
+}
+
+.support-resistance-bar-marker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-card);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.support-resistance-bar-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.percentil-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg-tape);
+  overflow: hidden;
+  margin-top: 0.35rem;
+  max-width: 420px;
+}
+
+.percentil-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #047857, var(--accent));
+}
+
+.activo-percentil-copy {
+  margin: 0.5rem 0 0;
+  font-size: 0.88rem;
+}
+
+.activo-caidas-details {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.activo-caidas-list {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.activo-earnings {
+  margin-bottom: 1.5rem;
+}
+
+.earnings-chart {
+  margin-top: 0.5rem;
+}
+
+.earnings-surprise-legend {
+  margin-top: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
 }
 
 .activo-indicadores {
@@ -3989,6 +4110,13 @@ button {
   color: var(--accent);
 }
 
+.landing-pricing-sub {
+  margin: 0.5rem 0 0;
+  font-size: 0.92rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
 .landing-pricing-list {
   text-align: left;
   margin: 0.8rem 0 1rem;
@@ -4525,4 +4653,288 @@ button {
 
 .valuation-chart {
   width: 100%;
+}
+
+/* Portfolio insights & wealth-style */
+.insights-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+  align-items: start;
+}
+
+.insights-geo-pie {
+  grid-column: 1 / -1;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+@media (max-width: 960px) {
+  .insights-grid {
+    grid-template-columns: 1fr;
+  }
+  .insights-geo-pie {
+    grid-column: auto;
+    max-width: none;
+  }
+}
+
+.portfolio-perf-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.portfolio-perf-chart {
+  margin-top: 0.5rem;
+}
+
+.income-section {
+  margin-bottom: 1rem;
+}
+
+.portfolio-income-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2rem;
+  margin-bottom: 0.75rem;
+}
+
+.portfolio-income-upcoming {
+  margin-bottom: 0.75rem;
+}
+
+.portfolio-div-list {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.portfolio-csv-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.portfolio-csv-btn:hover {
+  color: var(--accent);
+  border-color: rgba(0, 168, 122, 0.35);
+}
+
+.portfolio-csv-input {
+  display: none;
+}
+
+.ingeld-modal--wide {
+  max-width: 640px;
+  width: min(96vw, 640px);
+}
+
+/* Navbar portfolio dropdown */
+.nav-dropdown {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.nav-dropdown-trigger {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.nav-dropdown-trigger:hover,
+.nav-dropdown-trigger.active {
+  color: var(--accent);
+}
+
+.nav-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0.35rem;
+  min-width: 200px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  padding: 0.35rem 0;
+}
+
+.nav-dropdown-menu a {
+  padding: 0.45rem 0.85rem;
+  font-size: 0.85rem;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.nav-dropdown-menu a:hover,
+.nav-dropdown-menu a.active {
+  color: var(--accent);
+  background: rgba(0, 168, 122, 0.08);
+}
+
+/* Metas */
+.metas-page {
+  max-width: 960px;
+}
+
+.metas-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.metas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.goal-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  background: var(--bg-card);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.goal-card-title {
+  font-size: 1rem;
+  margin: 0 0 0.65rem;
+}
+
+.goal-progress-wrap {
+  margin-bottom: 0.5rem;
+}
+
+.goal-progress-bar {
+  height: 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.goal-progress-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.4s ease;
+}
+
+.goal-pct {
+  font-size: 0.78rem;
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+}
+
+.goal-amounts {
+  font-size: 0.9rem;
+  margin: 0.35rem 0;
+}
+
+.goal-days {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin: 0 0 0.65rem;
+}
+
+.goal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+/* Net worth */
+.networth-page {
+  max-width: 960px;
+}
+
+.networth-header {
+  margin: 1rem 0 1.25rem;
+}
+
+.networth-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0 0 0.35rem;
+}
+
+.networth-big {
+  font-size: 1.65rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin: 0;
+}
+
+.networth-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 800px) {
+  .networth-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.networth-col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.asset-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.9rem;
+  margin-bottom: 0.5rem;
+  background: var(--bg-card);
+}
+
+.asset-card--highlight {
+  border-color: rgba(0, 168, 122, 0.35);
+  background: rgba(0, 168, 122, 0.06);
+}
+
+.asset-card-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.asset-card h3 {
+  margin: 0.15rem 0;
+  font-size: 0.95rem;
+}
+
+.networth-pie-wrap {
+  margin-top: 0.5rem;
 }

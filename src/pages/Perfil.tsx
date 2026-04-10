@@ -100,7 +100,9 @@ export function Perfil() {
         </p>
         <p className="font-prose">
           <strong>Plan:</strong>{' '}
-          {user.plan === 'pro' ? 'Pro' : 'Free'}
+          {user.plan === 'weekly' || user.plan === 'pro'
+            ? 'Weekly ($2/sem)'
+            : 'Free'}
         </p>
         <div className="perfil-stats font-prose">
           <p>Favoritos guardados: {favCount}</p>
