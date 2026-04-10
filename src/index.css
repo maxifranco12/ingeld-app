@@ -7,6 +7,7 @@
   --bg-card: #faf9f7;
   --bg-tape: #e8e4de;
   --bg-navbar: #1c1f24;
+  --nav-bg: #1c1f24;
 
   --border: rgba(0, 0, 0, 0.08);
   --border-subtle: rgba(0, 0, 0, 0.05);
@@ -4110,13 +4111,6 @@ button {
   color: var(--accent);
 }
 
-.landing-pricing-sub {
-  margin: 0.5rem 0 0;
-  font-size: 0.92rem;
-  color: var(--text-muted);
-  line-height: 1.45;
-}
-
 .landing-pricing-list {
   text-align: left;
   margin: 0.8rem 0 1rem;
@@ -4744,6 +4738,7 @@ button {
   position: relative;
   display: inline-flex;
   align-items: center;
+  z-index: 1000;
 }
 
 .nav-dropdown-trigger {
@@ -4770,28 +4765,35 @@ button {
   top: 100%;
   left: 0;
   margin-top: 0.35rem;
-  min-width: 200px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  z-index: 40;
+  min-width: 180px;
+  padding: 0.5rem 0;
+  background: var(--nav-bg);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
   display: flex;
   flex-direction: column;
-  padding: 0.35rem 0;
 }
 
-.nav-dropdown-menu a {
-  padding: 0.45rem 0.85rem;
+.nav-dropdown-item {
+  color: var(--nav-text);
+  padding: 0.6rem 1rem;
+  display: block;
   font-size: 0.85rem;
-  color: var(--text);
   text-decoration: none;
 }
 
-.nav-dropdown-menu a:hover,
-.nav-dropdown-menu a.active {
+.nav-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--nav-text);
+  text-decoration: none;
+}
+
+.nav-dropdown-item.active {
   color: var(--accent);
-  background: rgba(0, 168, 122, 0.08);
+  background: rgba(255, 255, 255, 0.08);
+  text-decoration: none;
 }
 
 /* Metas */

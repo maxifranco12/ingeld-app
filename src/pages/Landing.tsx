@@ -50,9 +50,6 @@ export function Landing() {
           <h2 className="landing-section-title">Simple y transparente</h2>
           <div className="landing-pricing-card">
             <p className="landing-price">$2 USD por semana</p>
-            <p className="landing-pricing-sub font-prose">
-              El café de los domingos. Acceso completo a INGELD toda la semana.
-            </p>
             <ul className="landing-pricing-list font-prose">
               <li>Scanner avanzado + comparador de activos</li>
               <li>Análisis IA completo (técnico + fundamental + noticias)</li>

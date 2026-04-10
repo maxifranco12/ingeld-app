@@ -32,14 +32,14 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<RootRoute />} />
-        <Route path="/buscador" element={<Buscador />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
 
         <Route element={<ProtectedRoute />}>
-          <Route path="/" element={<Layout />}>
+            <Route path="/" element={<Layout />}>
             <Route path="panel" element={<Dashboard />} />
+            <Route path="buscador" element={<Buscador />} />
             <Route path="scanner" element={<Scanner />} />
             <Route path="favoritos" element={<Favoritos />} />
             <Route path="activo/:symbol" element={<Activo />} />

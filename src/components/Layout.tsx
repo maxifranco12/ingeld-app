@@ -70,7 +70,11 @@ export function Layout() {
                 <div className="nav-dropdown-menu" role="menu">
                   <NavLink
                     to="/portfolio"
-                    className={({ isActive }) => (isActive ? 'active' : undefined)}
+                    className={({ isActive }) =>
+                      ['nav-dropdown-item', isActive ? 'active' : '']
+                        .filter(Boolean)
+                        .join(' ')
+                    }
                     role="menuitem"
                     onClick={() => setPfOpen(false)}
                   >
@@ -78,7 +82,11 @@ export function Layout() {
                   </NavLink>
                   <NavLink
                     to="/metas"
-                    className={({ isActive }) => (isActive ? 'active' : undefined)}
+                    className={({ isActive }) =>
+                      ['nav-dropdown-item', isActive ? 'active' : '']
+                        .filter(Boolean)
+                        .join(' ')
+                    }
                     role="menuitem"
                     onClick={() => setPfOpen(false)}
                   >
@@ -86,7 +94,11 @@ export function Layout() {
                   </NavLink>
                   <NavLink
                     to="/networth"
-                    className={({ isActive }) => (isActive ? 'active' : undefined)}
+                    className={({ isActive }) =>
+                      ['nav-dropdown-item', isActive ? 'active' : '']
+                        .filter(Boolean)
+                        .join(' ')
+                    }
                     role="menuitem"
                     onClick={() => setPfOpen(false)}
                   >
