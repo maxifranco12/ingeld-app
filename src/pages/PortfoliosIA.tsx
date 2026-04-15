@@ -1,0 +1,767 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Sparkles } from 'lucide-react'
+import {
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import { AnalysisMarkdown } from '../lib/renderAnalysisMarkdown'
+
+type Posicion = {
+  ticker: string
+  nombre: string
+  peso: number
+  sector: string
+}
+
+type PortfolioIA = {
+  id: string
+  nombre: string
+  gestor: string
+  plataforma: string
+  url: string
+  twitter: string
+  capital_inicial: number
+  capital_actual: number
+  inicio: string
+  color: string
+  posiciones: Posicion[]
+}
+
+const HARDCODED: { portfolios: PortfolioIA[] } = {
+  portfolios: [
+    {
+      id: 'claude',
+      nombre: 'Claude Portfolio',
+      gestor: 'Anthropic Claude',
+      plataforma: 'Autopilot',
+      url: 'https://joinautopilot.com/landing/5/950048',
+      twitter: '@theaiportfolios',
+      capital_inicial: 50000,
+      capital_actual: 50013.79,
+      inicio: '2026-04-01',
+      color: '#00a87a',
+      posiciones: [
+        { ticker: 'AVGO', nombre: 'Broadcom', peso: 10, sector: 'Technology' },
+        { ticker: 'VST', nombre: 'Vistra', peso: 10, sector: 'Energy' },
+        { ticker: 'LLY', nombre: 'Eli Lilly', peso: 8, sector: 'Healthcare' },
+        { ticker: 'GLD', nombre: 'Gold ETF', peso: 11, sector: 'Commodities' },
+        { ticker: 'MSFT', nombre: 'Microsoft', peso: 8, sector: 'Technology' },
+        { ticker: 'HWM', nombre: 'Howmet Aerospace', peso: 4, sector: 'Industrials' },
+        { ticker: 'AU', nombre: 'Anglogold Ashanti', peso: 4, sector: 'Mining' },
+      ],
+    },
+    {
+      id: 'grok',
+      nombre: 'Grok Portfolio',
+      gestor: 'xAI Grok',
+      plataforma: 'Autopilot',
+      url: 'https://joinautopilot.com',
+      twitter: '@grokportfolio',
+      capital_inicial: 50000,
+      capital_actual: 50000,
+      inicio: '2026-04-01',
+      color: '#6366f1',
+      posiciones: [],
+    },
+    {
+      id: 'gemini',
+      nombre: 'Gemini Portfolio',
+      gestor: 'Google Gemini',
+      plataforma: 'Autopilot',
+      url: 'https://joinautopilot.com',
+      twitter: '@geminiportfolio',
+      capital_inicial: 50000,
+      capital_actual: 50000,
+      inicio: '2026-04-01',
+      color: '#4285f4',
+      posiciones: [],
+    },
+    {
+      id: 'gpt',
+      nombre: 'GPT Portfolio',
+      gestor: 'OpenAI GPT-4',
+      plataforma: 'Autopilot',
+      url: 'https://joinautopilot.com',
+      twitter: '@gptportfolio',
+      capital_inicial: 50000,
+      capital_actual: 50000,
+      inicio: '2026-04-01',
+      color: '#10a37f',
+      posiciones: [],
+    },
+  ],
+}
+
+const LAST_OPS: Record<
+  string,
+  { fecha: string; accion: 'COMPRÓ' | 'VENDIÓ'; ticker: string; razon: string }[]
+> = {
+  claude: [
+    {
+      fecha: '2026-04-02',
+      accion: 'COMPRÓ',
+      ticker: 'GLD',
+      razon: 'Refuerzo de cobertura ante volatilidad macro.',
+    },
+    {
+      fecha: '2026-04-01',
+      accion: 'COMPRÓ',
+      ticker: 'AVGO',
+      razon: 'Exposición semiconductores; tesis de IA en infraestructura.',
+    },
+    {
+      fecha: '2026-04-01',
+      accion: 'COMPRÓ',
+      ticker: 'MSFT',
+      razon: 'Core quality + flujos recurrentes en nube.',
+    },
+  ],
+  grok: [
+    {
+      fecha: '2026-04-01',
+      accion: 'COMPRÓ',
+      ticker: 'SPY',
+      razon: 'Inicialización del book en benchmark.',
+    },
+  ],
+  gemini: [],
+  gpt: [],
+}
+
+type QuoteRow = {
+  symbol: string
+  name?: string
+  price: number
+  changePct: number
+  currency?: string
+}
+
+const TAB_ORDER = ['claude', 'grok', 'gemini', 'gpt'] as const
+type TabId = (typeof TAB_ORDER)[number] | 'comparar'
+
+const TAB_LABEL: Record<Exclude<TabId, 'comparar'>, string> = {
+  claude: 'Claude',
+  grok: 'Grok',
+  gemini: 'Gemini',
+  gpt: 'GPT',
+}
+
+const TAB_STYLE: Record<Exclude<TabId, 'comparar'>, string> = {
+  claude: 'ai-pf-tab--claude',
+  grok: 'ai-pf-tab--grok',
+  gemini: 'ai-pf-tab--gemini',
+  gpt: 'ai-pf-tab--gpt',
+}
+
+const LINE_STROKE: Record<string, string> = {
+  claude: '#00a87a',
+  grok: '#6366f1',
+  gemini: '#4285f4',
+  gpt: '#10a37f',
+}
+
+const COL_TOP: Record<string, string> = {
+  claude: 'ai-pf-compare-col--claude',
+  grok: 'ai-pf-compare-col--grok',
+  gemini: 'ai-pf-compare-col--gemini',
+  gpt: 'ai-pf-compare-col--gpt',
+}
+
+function quoteSymbolsFromPortfolios(portfolios: PortfolioIA[]): string[] {
+  const syms = new Set<string>(['SPY'])
+  for (const p of portfolios) {
+    for (const x of p.posiciones) syms.add(x.ticker.toUpperCase())
+  }
+  return [...syms]
+}
+
+function totalReturnPct(p: PortfolioIA): number {
+  if (!p.capital_inicial) return 0
+  return (p.capital_actual / p.capital_inicial - 1) * 100
+}
+
+/** Retorno del día ponderado por peso, solo posiciones con cotización. */
+function weightedDayReturnPct(
+  p: PortfolioIA,
+  quotes: Record<string, QuoteRow>,
+): number | null {
+  if (!p.posiciones.length) return null
+  let sum = 0
+  let n = 0
+  for (const pos of p.posiciones) {
+    const q = quotes[pos.ticker.toUpperCase()]
+    if (q && typeof q.changePct === 'number') {
+      sum += (pos.peso / 100) * q.changePct
+      n += 1
+    }
+  }
+  if (n === 0) return null
+  return sum
+}
+
+function daysActive(inicio: string): number {
+  const start = new Date(inicio + 'T12:00:00').getTime()
+  return Math.max(1, Math.ceil((Date.now() - start) / 86_400_000))
+}
+
+function sectorPie(posiciones: Posicion[]) {
+  const m = new Map<string, number>()
+  for (const x of posiciones) m.set(x.sector, (m.get(x.sector) ?? 0) + x.peso)
+  return [...m.entries()].map(([name, value]) => ({ name, value }))
+}
+
+function simulatedSeries(
+  inicio: string,
+  ids: string[],
+  retById: Record<string, number>,
+  points = 24,
+): Record<string, string | number>[] {
+  const start = new Date(inicio + 'T12:00:00')
+  const ms = Date.now() - start.getTime()
+  const out: Record<string, string | number>[] = []
+  for (let i = 0; i <= points; i++) {
+    const w = i / points
+    const t = start.getTime() + (ms * w) / points
+    const d = new Date(t)
+    const label = `${d.getMonth() + 1}/${d.getDate()}`
+    const noise = Math.sin(i * 1.7) * 0.12
+    const row: Record<string, string | number> = { label }
+    ids.forEach((id, idx) => {
+      const ret = retById[id] ?? 0
+      row[id] =
+        Math.round(100 * (1 + (ret / 100) * w + noise * (1 - idx * 0.08) * w) * 100) / 100
+    })
+    out.push(row)
+  }
+  return out
+}
+
+function maxWinIdx(vals: number[]): Set<number> {
+  if (!vals.length) return new Set()
+  const m = Math.max(...vals)
+  const s = new Set<number>()
+  vals.forEach((v, i) => {
+    if (Math.abs(v - m) < 1e-4) s.add(i)
+  })
+  return s
+}
+
+function minWinIdx(vals: number[]): Set<number> {
+  if (!vals.length) return new Set()
+  const m = Math.min(...vals)
+  const s = new Set<number>()
+  vals.forEach((v, i) => {
+    if (Math.abs(v - m) < 1e-4) s.add(i)
+  })
+  return s
+}
+
+function estVol(series: number[]): number {
+  if (series.length < 2) return 0
+  const rets: number[] = []
+  for (let i = 1; i < series.length; i++) {
+    rets.push((series[i]! - series[i - 1]!) / series[i - 1]!)
+  }
+  const mean = rets.reduce((a, b) => a + b, 0) / rets.length
+  const v = Math.sqrt(
+    rets.reduce((s, r) => s + (r - mean) ** 2, 0) / Math.max(1, rets.length - 1),
+  )
+  return Math.round(v * Math.sqrt(252) * 100 * 10) / 10
+}
+
+export default function PortfoliosIA() {
+  const [tab, setTab] = useState<TabId>('claude')
+  const [portfolios, setPortfolios] = useState<PortfolioIA[]>(HARDCODED.portfolios)
+  const [quotes, setQuotes] = useState<Record<string, QuoteRow>>({})
+  const [spyBench, setSpyBench] = useState<number | null>(null)
+  const [analysis, setAnalysis] = useState<string | null>(null)
+  const [analysisLoading, setAnalysisLoading] = useState(false)
+  const [compareText, setCompareText] = useState<string | null>(null)
+  const [compareLoading, setCompareLoading] = useState(false)
+
+  const ordered = useMemo(
+    () => TAB_ORDER.map((id) => portfolios.find((p) => p.id === id)).filter(Boolean) as PortfolioIA[],
+    [portfolios],
+  )
+
+  const active = portfolios.find((p) => p.id === tab)
+
+  useEffect(() => {
+    let c = false
+    void (async () => {
+      try {
+        const res = await fetch('/api/market/ai-portfolios')
+        if (!res.ok) return
+        const j = (await res.json()) as { portfolios?: PortfolioIA[] }
+        if (!c && j.portfolios?.length) setPortfolios(j.portfolios)
+      } catch {
+        /* keep hardcoded */
+      }
+    })()
+    return () => {
+      c = true
+    }
+  }, [])
+
+  const loadQuotes = useCallback(async (syms: string[]) => {
+    if (!syms.length) return
+    try {
+      const res = await fetch(`/api/market/quotes?symbols=${encodeURIComponent(syms.join(','))}`)
+      if (!res.ok) return
+      const j = (await res.json()) as { quotes?: QuoteRow[] }
+      const map: Record<string, QuoteRow> = {}
+      for (const q of j.quotes ?? []) map[q.symbol.toUpperCase()] = q
+      setQuotes((prev) => ({ ...prev, ...map }))
+    } catch {
+      /* noop */
+    }
+  }, [])
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch('/api/market/benchmark?symbols=SPY&period=5d')
+        if (!res.ok) return
+        const j = (await res.json()) as { returnPct?: number }
+        if (typeof j.returnPct === 'number') setSpyBench(j.returnPct)
+      } catch {
+        /* noop */
+      }
+    })()
+  }, [])
+
+  useEffect(() => {
+    const syms = quoteSymbolsFromPortfolios(portfolios)
+    void loadQuotes(syms)
+  }, [portfolios, loadQuotes])
+
+  useEffect(() => {
+    const syms = quoteSymbolsFromPortfolios(portfolios)
+    const id = window.setInterval(() => {
+      void loadQuotes(syms)
+    }, 30_000)
+    return () => clearInterval(id)
+  }, [portfolios, loadQuotes])
+
+  const spyQ = quotes['SPY']
+
+  const compareSeries = useMemo(() => {
+    const inicio = ordered[0]?.inicio ?? '2026-04-01'
+    const ids = ordered.map((p) => p.id)
+    const retById: Record<string, number> = {}
+    for (const p of ordered) retById[p.id] = totalReturnPct(p)
+    return simulatedSeries(inicio, ids, retById)
+  }, [ordered])
+
+  const volById = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const p of ordered) {
+      m[p.id] = estVol(compareSeries.map((d) => Number(d[p.id])))
+    }
+    return m
+  }, [ordered, compareSeries])
+
+  const runAnalysis = async (p: PortfolioIA) => {
+    setAnalysisLoading(true)
+    setAnalysis(null)
+    try {
+      const body = {
+        ticker: 'PORTFOLIO',
+        historial: [] as { role: string; content: string }[],
+        mensaje: `Portfolio IA "${p.nombre}" (${p.gestor}). Capital ${p.capital_inicial} → ${p.capital_actual}. Inicio ${p.inicio}.
+Posiciones: ${JSON.stringify(p.posiciones)}
+Respondé en español: diversificación, tesis inferida, mejor posición, riesgos. No inventes tickers fuera de la lista.`,
+      }
+      const res = await fetch('/api/chat/analizar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      const j = (await res.json()) as { respuesta?: string }
+      setAnalysis((j.respuesta ?? '').trim())
+    } catch (e) {
+      setAnalysis(e instanceof Error ? e.message : 'Error')
+    } finally {
+      setAnalysisLoading(false)
+    }
+  }
+
+  const runCompare = async () => {
+    if (ordered.length < 2) return
+    setCompareLoading(true)
+    setCompareText(null)
+    try {
+      const lines = ordered.map(
+        (p) =>
+          `${p.nombre}: capital ${p.capital_actual}/${p.capital_inicial}, posiciones ${JSON.stringify(p.posiciones)}`,
+      )
+      const res = await fetch('/api/chat/analizar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticker: 'PORTFOLIO',
+          historial: [],
+          mensaje: `Compará en español estos 4 portfolios IA:\n${lines.join('\n')}\n¿Quién va ganando y por qué? Breve.`,
+        }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      const j = (await res.json()) as { respuesta?: string }
+      setCompareText((j.respuesta ?? '').trim())
+    } catch (e) {
+      setCompareText(e instanceof Error ? e.message : 'Error')
+    } finally {
+      setCompareLoading(false)
+    }
+  }
+
+  const renderDetail = (p: PortfolioIA) => {
+    const ret = totalReturnPct(p)
+    const retHoy = weightedDayReturnPct(p, quotes)
+    const vsSpy = spyBench != null ? Math.round((ret - spyBench) * 100) / 100 : null
+    const dias = daysActive(p.inicio)
+    const pie = sectorPie(p.posiciones)
+    const ops = LAST_OPS[p.id] ?? []
+    const accent = p.color
+
+    return (
+      <div className="ai-pf-stack">
+        <article className="ai-pf-card" style={{ borderColor: `${accent}44` }}>
+          <div className="ai-pf-card-head">
+            <span
+              className="ai-pf-avatar"
+              style={{ backgroundColor: `${accent}28`, boxShadow: `inset 0 0 0 2px ${accent}` }}
+              aria-hidden
+            />
+            <div>
+              <h2 className="ai-pf-card-title">{p.nombre}</h2>
+              <p className="ai-pf-card-sub">
+                {p.gestor} · {p.plataforma}
+              </p>
+            </div>
+          </div>
+          <div className="ai-pf-metrics">
+            <div>
+              <p className="ai-pf-metric-label">Capital actual</p>
+              <p className="ai-pf-metric-big">
+                ${p.capital_actual.toLocaleString('es-AR', { maximumFractionDigits: 2 })}
+              </p>
+              <p className="ai-pf-metric-hint">Inicial ${p.capital_inicial.toLocaleString('es-AR')}</p>
+            </div>
+            <div>
+              <p className="ai-pf-metric-label">Retorno hoy</p>
+              {retHoy != null ? (
+                <p className={`ai-pf-metric-big ${retHoy >= 0 ? 'ai-pf-gain' : 'ai-pf-loss'}`}>
+                  {retHoy >= 0 ? '+' : ''}
+                  {retHoy.toFixed(2)}%
+                </p>
+              ) : (
+                <p className="ai-pf-metric-big ai-pf-muted">—</p>
+              )}
+            </div>
+            <div>
+              <p className="ai-pf-metric-label">Retorno total (desde inicio)</p>
+              <p className={`ai-pf-metric-big ${ret >= 0 ? 'ai-pf-gain' : 'ai-pf-loss'}`}>
+                {ret >= 0 ? '+' : ''}
+                {ret.toFixed(2)}%
+              </p>
+            </div>
+            <div>
+              <p className="ai-pf-metric-label">vs S&amp;P 500</p>
+              <p className="ai-pf-metric-mid">
+                {spyBench != null ? `SPY ~5d: ${spyBench >= 0 ? '+' : ''}${spyBench.toFixed(2)}%` : '—'}
+              </p>
+              {vsSpy != null ? (
+                <p className={`ai-pf-metric-hint ${vsSpy >= 0 ? 'ai-pf-gain' : 'ai-pf-loss'}`}>
+                  Δ cartera: {vsSpy >= 0 ? '+' : ''}
+                  {vsSpy.toFixed(2)} pp
+                </p>
+              ) : null}
+              {spyQ ? (
+                <p className="ai-pf-metric-hint">
+                  SPY {spyQ.price.toFixed(2)} ({spyQ.changePct >= 0 ? '+' : ''}
+                  {spyQ.changePct.toFixed(2)}%)
+                </p>
+              ) : null}
+            </div>
+            <div>
+              <p className="ai-pf-metric-label">Días activo</p>
+              <p className="ai-pf-metric-big">{dias}</p>
+              <p className="ai-pf-metric-hint">desde {p.inicio}</p>
+            </div>
+          </div>
+          <div className="ai-pf-actions">
+            <a className="ai-pf-btn ai-pf-btn--primary" href={p.url} target="_blank" rel="noreferrer">
+              Autopilot
+            </a>
+            <a
+              className="ai-pf-btn ai-pf-btn--ghost"
+              href={`https://twitter.com/${p.twitter.replace('@', '')}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Twitter/X
+            </a>
+          </div>
+        </article>
+
+        <section>
+          <h3 className="ai-pf-h3">Posiciones</h3>
+          {p.posiciones.length === 0 ? (
+            <p className="ai-pf-muted">Sin posiciones por ahora.</p>
+          ) : (
+            <>
+              <div className="ai-pf-pos-grid">
+                {p.posiciones.map((row) => {
+                  const q = quotes[row.ticker.toUpperCase()]
+                  const ch = q?.changePct ?? 0
+                  return (
+                    <div key={row.ticker} className="ai-pf-pos-card">
+                      <p className="ai-pf-ticker" style={{ color: accent }}>
+                        {row.ticker}
+                      </p>
+                      <p className="ai-pf-name">{row.nombre}</p>
+                      <span className="ai-pf-sector">{row.sector}</span>
+                      <div className="ai-pf-wbar-label">
+                        <span>Peso</span>
+                        <span>{row.peso}%</span>
+                      </div>
+                      <div className="ai-pf-wbar-track">
+                        <div
+                          className="ai-pf-wbar-fill"
+                          style={{ width: `${Math.min(100, row.peso)}%`, background: accent }}
+                        />
+                      </div>
+                      <p className="ai-pf-price-row">
+                        <span className="ai-pf-muted">Precio</span>
+                        <span>
+                          {q ? q.price.toLocaleString('es-AR', { maximumFractionDigits: 4 }) : '—'}
+                        </span>
+                      </p>
+                      <p className="ai-pf-price-row">
+                        <span className="ai-pf-muted">% día</span>
+                        {q ? (
+                          <span className={ch >= 0 ? 'ai-pf-gain' : 'ai-pf-loss'}>
+                            {ch >= 0 ? '+' : ''}
+                            {ch.toFixed(2)}%
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+              {pie.length > 0 ? (
+                <div className="ai-pf-pie">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pie}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={72}
+                        label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                      >
+                        {pie.map((_, i) => (
+                          <Cell
+                            key={i}
+                            fill={['#00a87a', '#6366f1', '#4285f4', '#10a37f', '#C9A84C'][i % 5]}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : null}
+            </>
+          )}
+        </section>
+
+        <section>
+          <h3 className="ai-pf-h3">Últimas operaciones</h3>
+          <div className="ai-pf-timeline">
+            {ops.length === 0 ? (
+              <p className="ai-pf-muted">Sin operaciones.</p>
+            ) : (
+              ops.map((o, i) => (
+                <div key={i} className="ai-pf-tl-item">
+                  <span
+                    className={`ai-pf-tl-dot ${o.accion === 'COMPRÓ' ? 'ai-pf-tl-dot--buy' : 'ai-pf-tl-dot--sell'}`}
+                  />
+                  <p className="ai-pf-tl-date">{o.fecha}</p>
+                  <p className={o.accion === 'COMPRÓ' ? 'ai-pf-gain' : 'ai-pf-loss'}>
+                    {o.accion} <span className="ai-pf-tl-tick">{o.ticker}</span>
+                  </p>
+                  <p className="ai-pf-tl-reason">{o.razon}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        <section className="ai-pf-analyze">
+          <h3 className="ai-pf-h3">Análisis IA</h3>
+          <button
+            type="button"
+            className="ai-pf-btn ai-pf-btn--primary"
+            disabled={analysisLoading}
+            onClick={() => void runAnalysis(p)}
+          >
+            {analysisLoading ? 'Analizando…' : 'Analizar este portfolio'}
+          </button>
+          {analysis ? (
+            <div className="ai-pf-md">
+              <AnalysisMarkdown source={analysis} />
+            </div>
+          ) : null}
+        </section>
+      </div>
+    )
+  }
+
+  const renderCompare = () => {
+    if (ordered.length < 2) return null
+    const rets = ordered.map(totalReturnPct)
+    const exc = ordered.map((p) => (spyBench != null ? totalReturnPct(p) - spyBench : null))
+    const vols = ordered.map((p) => volById[p.id] ?? 0)
+    const wR = maxWinIdx(rets)
+    const wE =
+      exc.every((x) => x != null) && exc.length ? maxWinIdx(exc as number[]) : new Set<number>()
+    const wV = minWinIdx(vols)
+
+    return (
+      <div className="ai-pf-stack">
+        <div className="ai-pf-compare-grid">
+          {ordered.map((p, i) => {
+            const r = rets[i]!
+            const e = exc[i]
+            const v = vols[i]!
+            return (
+              <div key={p.id} className={`ai-pf-compare-col ${COL_TOP[p.id] ?? ''}`}>
+                <h3 className="ai-pf-compare-title">{TAB_LABEL[p.id as keyof typeof TAB_LABEL]}</h3>
+                <p className="ai-pf-compare-line">
+                  <span>Retorno</span>
+                  <span className={`${wR.has(i) ? 'ai-pf-win' : ''} ${r >= 0 ? 'ai-pf-gain' : 'ai-pf-loss'}`}>
+                    {r >= 0 ? '+' : ''}
+                    {r.toFixed(2)}%
+                  </span>
+                </p>
+                <p className="ai-pf-compare-line">
+                  <span>vs SPY</span>
+                  <span className={wE.has(i) ? 'ai-pf-win' : ''}>
+                    {e != null ? `${e >= 0 ? '+' : ''}${e.toFixed(2)} pp` : '—'}
+                  </span>
+                </p>
+                <p className="ai-pf-compare-line">
+                  <span>Vol. sim.</span>
+                  <span className={wV.has(i) ? 'ai-pf-win' : ''}>{v}%</span>
+                </p>
+                <p className="ai-pf-compare-line">
+                  <span>Posiciones</span>
+                  <span>{p.posiciones.length}</span>
+                </p>
+              </div>
+            )
+          })}
+        </div>
+        <div className="ai-pf-chart">
+          <p className="ai-pf-chart-cap">Performance simulada (referencia visual)</p>
+          <ResponsiveContainer width="100%" height="90%">
+            <LineChart data={compareSeries}>
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#888' }} />
+              <YAxis tick={{ fontSize: 10, fill: '#888' }} domain={['auto', 'auto']} />
+              <Tooltip />
+              <Legend />
+              {ordered.map((p) => (
+                <Line
+                  key={p.id}
+                  type="monotone"
+                  dataKey={p.id}
+                  name={TAB_LABEL[p.id as keyof typeof TAB_LABEL]}
+                  stroke={LINE_STROKE[p.id] ?? p.color}
+                  strokeWidth={2}
+                  dot={false}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        <section className="ai-pf-analyze">
+          <button
+            type="button"
+            className="ai-pf-btn ai-pf-btn--primary"
+            disabled={compareLoading}
+            onClick={() => void runCompare()}
+          >
+            {compareLoading ? 'Generando…' : 'Análisis comparativo IA'}
+          </button>
+          {compareText ? (
+            <div className="ai-pf-md">
+              <AnalysisMarkdown source={compareText} />
+            </div>
+          ) : null}
+        </section>
+      </div>
+    )
+  }
+
+  return (
+    <div className="ai-pf-page">
+      <header className="ai-pf-hero">
+        <div className="ai-pf-hero-inner">
+          <div className="ai-pf-hero-row">
+            <Sparkles className="ai-pf-spark" aria-hidden />
+            <h1 className="ai-pf-h1">Portfolios IA en vivo</h1>
+          </div>
+          <p className="ai-pf-hero-sub">
+            Seguí en tiempo real los books gestionados por IA en Autopilot.
+          </p>
+          <span className="ai-pf-badge">● EN VIVO</span>
+        </div>
+      </header>
+
+      <div className="ai-pf-body">
+        <div className="ai-pf-tabs" role="tablist">
+          {TAB_ORDER.map((id) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={tab === id}
+              className={`ai-pf-tab ${TAB_STYLE[id]} ${tab === id ? 'is-active' : ''}`}
+              onClick={() => setTab(id)}
+            >
+              {TAB_LABEL[id]}
+            </button>
+          ))}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'comparar'}
+            className={`ai-pf-tab ai-pf-tab--cmp ${tab === 'comparar' ? 'is-active' : ''}`}
+            onClick={() => setTab('comparar')}
+          >
+            Comparar
+          </button>
+        </div>
+
+        {tab !== 'comparar' && active ? renderDetail(active) : null}
+        {tab === 'comparar' ? renderCompare() : null}
+      </div>
+    </div>
+  )
+}

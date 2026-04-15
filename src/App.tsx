@@ -20,6 +20,7 @@ import { Comparador } from './pages/Comparador'
 import { Historial } from './pages/Historial'
 import { Metas } from './pages/Metas'
 import { NetWorth } from './pages/NetWorth'
+import PortfoliosIA from './pages/PortfoliosIA'
 
 function RootRoute() {
   const { isAuthenticated, loading } = useAuth()
@@ -52,6 +53,7 @@ export default function App() {
             <Route path="historial" element={<Historial />} />
             <Route path="metas" element={<Metas />} />
             <Route path="networth" element={<NetWorth />} />
+            <Route path="portfolios-ia" element={<PortfoliosIA />} />
             <Route path="admin" element={<AdminOnly />} />
           </Route>
         </Route>

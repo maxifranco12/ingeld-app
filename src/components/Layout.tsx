@@ -13,6 +13,7 @@ const navBeforePf: { to: string; label: string; end?: boolean }[] = [
 const navAfterPf: { to: string; label: string; end?: boolean }[] = [
   { to: '/alertas', label: 'Alertas' },
   { to: '/analisis', label: 'Análisis' },
+  { to: '/portfolios-ia', label: 'Portfolios IA' },
   { to: '/comparador', label: 'Comparador' },
 ]
 

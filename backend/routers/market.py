@@ -1436,3 +1436,149 @@ def history(
             }
         )
     return {"symbol": sym, "period": period, "interval": interval, "bars": rows}
+
+
+@router.get("/ai-portfolios")
+def ai_portfolios() -> dict[str, Any]:
+    return {
+        "portfolios": [
+            {
+                "id": "claude",
+                "nombre": "Claude Portfolio",
+                "gestor": "Anthropic Claude",
+                "plataforma": "Autopilot",
+                "url": "https://joinautopilot.com/landing/5/950048",
+                "twitter": "@theaiportfolios",
+                "capital_inicial": 50000,
+                "capital_actual": 50013.79,
+                "inicio": "2026-04-01",
+                "color": "#00a87a",
+                "posiciones": [
+                    {
+                        "ticker": "AVGO",
+                        "nombre": "Broadcom",
+                        "peso": 10,
+                        "sector": "Technology",
+                    },
+                    {"ticker": "VST", "nombre": "Vistra", "peso": 10, "sector": "Energy"},
+                    {"ticker": "LLY", "nombre": "Eli Lilly", "peso": 8, "sector": "Healthcare"},
+                    {"ticker": "GLD", "nombre": "Gold ETF", "peso": 11, "sector": "Commodities"},
+                    {"ticker": "MSFT", "nombre": "Microsoft", "peso": 8, "sector": "Technology"},
+                    {
+                        "ticker": "HWM",
+                        "nombre": "Howmet Aerospace",
+                        "peso": 4,
+                        "sector": "Industrials",
+                    },
+                    {
+                        "ticker": "AU",
+                        "nombre": "Anglogold Ashanti",
+                        "peso": 4,
+                        "sector": "Mining",
+                    },
+                ],
+            },
+            {
+                "id": "grok",
+                "nombre": "Grok Portfolio",
+                "gestor": "xAI Grok",
+                "plataforma": "Autopilot",
+                "url": "https://marketplace.joinautopilot.com/landing/5/568906",
+                "twitter": "@grkportfolio",
+                "capital_inicial": 50000,
+                "capital_actual": 57500,
+                "inicio": "2025-02-12",
+                "color": "#6366f1",
+                "posiciones": [
+                    {"ticker": "VST", "nombre": "Vistra", "peso": 12, "sector": "Energy"},
+                    {"ticker": "TLN", "nombre": "Talen Energy", "peso": 10, "sector": "Energy"},
+                    {"ticker": "NRG", "nombre": "NRG Energy", "peso": 8, "sector": "Energy"},
+                    {"ticker": "DVN", "nombre": "Devon Energy", "peso": 7, "sector": "Energy"},
+                    {"ticker": "LMT", "nombre": "Lockheed Martin", "peso": 10, "sector": "Defense"},
+                    {"ticker": "GD", "nombre": "General Dynamics", "peso": 8, "sector": "Defense"},
+                    {"ticker": "BWXT", "nombre": "BWX Technologies", "peso": 7, "sector": "Defense"},
+                    {"ticker": "AMTM", "nombre": "Amentum Holdings", "peso": 8, "sector": "Defense"},
+                    {"ticker": "MSFT", "nombre": "Microsoft", "peso": 10, "sector": "Technology"},
+                    {"ticker": "PSN", "nombre": "Parsons Corp", "peso": 6, "sector": "Defense"},
+                    {"ticker": "KBR", "nombre": "KBR Inc", "peso": 6, "sector": "Defense"},
+                ],
+                "operaciones": [
+                    {
+                        "fecha": "2026-04-07",
+                        "accion": "REBALANCEÓ",
+                        "ticker": "VST",
+                        "razon": "Refuerza energía ante demanda de data centers",
+                    },
+                    {
+                        "fecha": "2026-04-07",
+                        "accion": "COMPRÓ",
+                        "ticker": "LMT",
+                        "razon": "Backlog defense ante conflicto Iran",
+                    },
+                    {
+                        "fecha": "2026-04-07",
+                        "accion": "COMPRÓ",
+                        "ticker": "AMTM",
+                        "razon": "Descuento con backlog $47B",
+                    },
+                ],
+            },
+            {
+                "id": "gemini",
+                "nombre": "Portfolio próximamente — Google Gemini no tiene portfolio público en Autopilot todavía.",
+                "gestor": "Google Gemini",
+                "plataforma": "Autopilot",
+                "url": "https://joinautopilot.com",
+                "twitter": "@geminiportfolio",
+                "capital_inicial": 50000,
+                "capital_actual": 50000,
+                "inicio": "2026-04-01",
+                "color": "#4285f4",
+                "posiciones": [],
+            },
+            {
+                "id": "gpt",
+                "nombre": "GPT Portfolio",
+                "gestor": "OpenAI GPT-5",
+                "plataforma": "Autopilot",
+                "url": "https://www.joinautopilot.com/landing/5/63080",
+                "twitter": "@thegptfund",
+                "capital_inicial": 50000,
+                "capital_actual": 52900,
+                "inicio": "2023-05-16",
+                "color": "#10a37f",
+                "posiciones": [
+                    {"ticker": "MSFT", "nombre": "Microsoft", "peso": 8, "sector": "Technology"},
+                    {"ticker": "NVDA", "nombre": "Nvidia", "peso": 10, "sector": "Technology"},
+                    {"ticker": "AAPL", "nombre": "Apple", "peso": 8, "sector": "Technology"},
+                    {"ticker": "AMZN", "nombre": "Amazon", "peso": 8, "sector": "Technology"},
+                    {"ticker": "META", "nombre": "Meta", "peso": 7, "sector": "Technology"},
+                    {"ticker": "GOOGL", "nombre": "Alphabet", "peso": 7, "sector": "Technology"},
+                    {"ticker": "BRK-B", "nombre": "Berkshire Hathaway", "peso": 6, "sector": "Financial"},
+                    {"ticker": "NFLX", "nombre": "Netflix", "peso": 5, "sector": "Communication"},
+                    {"ticker": "WMT", "nombre": "Walmart", "peso": 5, "sector": "Consumer"},
+                    {"ticker": "V", "nombre": "Visa", "peso": 5, "sector": "Financial"},
+                ],
+                "operaciones": [
+                    {
+                        "fecha": "2025-08-01",
+                        "accion": "REBALANCEÓ",
+                        "ticker": "NVDA",
+                        "razon": "Upgrade a GPT-5, nuevos picks de agosto",
+                    },
+                    {
+                        "fecha": "2025-08-01",
+                        "accion": "COMPRÓ",
+                        "ticker": "META",
+                        "razon": "Fuerte crecimiento AI y publicidad",
+                    },
+                    {
+                        "fecha": "2025-08-01",
+                        "accion": "COMPRÓ",
+                        "ticker": "WMT",
+                        "razon": "Defensivo con crecimiento e-commerce",
+                    },
+                ],
+            },
+        ]
+    }
