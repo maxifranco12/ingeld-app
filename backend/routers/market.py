@@ -1582,3 +1582,74 @@ def ai_portfolios() -> dict[str, Any]:
             },
         ]
     }
+
+
+@router.get("/ai-operations")
+def ai_operations() -> dict[str, Any]:
+    """Últimas operaciones por portfolio (demo); fechas al día actual."""
+    today = date.today().isoformat()
+    return {
+        "operations": {
+            "claude": [
+                {
+                    "fecha": today,
+                    "accion": "COMPRÓ",
+                    "ticker": "GLD",
+                    "razon": "Refuerzo de cobertura ante volatilidad macro.",
+                },
+                {
+                    "fecha": today,
+                    "accion": "COMPRÓ",
+                    "ticker": "AVGO",
+                    "razon": "Exposición semiconductores; tesis de IA en infraestructura.",
+                },
+                {
+                    "fecha": today,
+                    "accion": "COMPRÓ",
+                    "ticker": "MSFT",
+                    "razon": "Core quality + flujos recurrentes en nube.",
+                },
+            ],
+            "grok": [
+                {
+                    "fecha": today,
+                    "accion": "REBALANCEÓ",
+                    "ticker": "VST",
+                    "razon": "Refuerza energía ante demanda de data centers",
+                },
+                {
+                    "fecha": today,
+                    "accion": "COMPRÓ",
+                    "ticker": "LMT",
+                    "razon": "Backlog defense ante conflicto Iran",
+                },
+                {
+                    "fecha": today,
+                    "accion": "COMPRÓ",
+                    "ticker": "AMTM",
+                    "razon": "Descuento con backlog $47B",
+                },
+            ],
+            "gemini": [],
+            "gpt": [
+                {
+                    "fecha": today,
+                    "accion": "REBALANCEÓ",
+                    "ticker": "NVDA",
+                    "razon": "Upgrade a GPT-5, nuevos picks de agosto",
+                },
+                {
+                    "fecha": today,
+                    "accion": "COMPRÓ",
+                    "ticker": "META",
+                    "razon": "Fuerte crecimiento AI y publicidad",
+                },
+                {
+                    "fecha": today,
+                    "accion": "COMPRÓ",
+                    "ticker": "WMT",
+                    "razon": "Defensivo con crecimiento e-commerce",
+                },
+            ],
+        }
+    }

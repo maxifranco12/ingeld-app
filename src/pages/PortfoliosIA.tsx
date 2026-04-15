@@ -100,10 +100,14 @@ const HARDCODED: { portfolios: PortfolioIA[] } = {
   ],
 }
 
-const LAST_OPS: Record<
-  string,
-  { fecha: string; accion: 'COMPRÓ' | 'VENDIÓ'; ticker: string; razon: string }[]
-> = {
+type OperacionRow = {
+  fecha: string
+  accion: string
+  ticker: string
+  razon: string
+}
+
+const LAST_OPS: Record<string, OperacionRow[]> = {
   claude: [
     {
       fecha: '2026-04-02',
@@ -286,6 +290,9 @@ export default function PortfoliosIA() {
   const [analysisLoading, setAnalysisLoading] = useState(false)
   const [compareText, setCompareText] = useState<string | null>(null)
   const [compareLoading, setCompareLoading] = useState(false)
+  const [remoteOps, setRemoteOps] = useState<Record<string, OperacionRow[]> | null>(null)
+  const [opsFetchedAt, setOpsFetchedAt] = useState<number | null>(null)
+  const [opsMetaTick, setOpsMetaTick] = useState(0)
 
   const ordered = useMemo(
     () => TAB_ORDER.map((id) => portfolios.find((p) => p.id === id)).filter(Boolean) as PortfolioIA[],
@@ -350,6 +357,36 @@ export default function PortfoliosIA() {
     }, 30_000)
     return () => clearInterval(id)
   }, [portfolios, loadQuotes])
+
+  const fetchOperations = useCallback(async () => {
+    try {
+      const res = await fetch('/api/market/ai-operations')
+      if (!res.ok) return
+      const j = (await res.json()) as { operations?: Record<string, OperacionRow[]> }
+      if (j.operations) {
+        setRemoteOps(j.operations)
+        setOpsFetchedAt(Date.now())
+      }
+    } catch {
+      /* noop */
+    }
+  }, [])
+
+  useEffect(() => {
+    void fetchOperations()
+    const id = window.setInterval(() => void fetchOperations(), 5 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [fetchOperations])
+
+  useEffect(() => {
+    const id = window.setInterval(() => setOpsMetaTick((x) => x + 1), 60_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const opsAgeMin = useMemo(() => {
+    if (opsFetchedAt == null) return null
+    return Math.max(0, Math.floor((Date.now() - opsFetchedAt) / 60_000))
+  }, [opsFetchedAt, opsMetaTick])
 
   const spyQ = quotes['SPY']
 
@@ -429,7 +466,8 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
     const vsSpy = spyBench != null ? Math.round((ret - spyBench) * 100) / 100 : null
     const dias = daysActive(p.inicio)
     const pie = sectorPie(p.posiciones)
-    const ops = LAST_OPS[p.id] ?? []
+    const ops =
+      remoteOps === null ? (LAST_OPS[p.id] ?? []) : (remoteOps[p.id] ?? [])
     const accent = p.color
 
     return (
@@ -562,7 +600,7 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
                 })}
               </div>
               {pie.length > 0 ? (
-                <div className="ai-pf-pie">
+                <div className="ai-pf-pie" style={{ height: 320 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -570,8 +608,8 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
                         dataKey="value"
                         nameKey="name"
                         cx="50%"
-                        cy="50%"
-                        outerRadius={72}
+                        cy="40%"
+                        outerRadius={90}
                         label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                       >
                         {pie.map((_, i) => (
@@ -582,7 +620,11 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
                         ))}
                       </Pie>
                       <Tooltip />
-                      <Legend />
+                      <Legend
+                        layout="horizontal"
+                        verticalAlign="bottom"
+                        align="center"
+                      />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -592,7 +634,25 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
         </section>
 
         <section>
-          <h3 className="ai-pf-h3">Últimas operaciones</h3>
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'baseline',
+              justifyContent: 'space-between',
+              gap: '0.35rem 0.75rem',
+              marginBottom: '0.65rem',
+            }}
+          >
+            <h3 className="ai-pf-h3" style={{ marginBottom: 0 }}>
+              Últimas operaciones
+            </h3>
+            {opsFetchedAt != null ? (
+              <span className="ai-pf-muted" style={{ fontSize: '0.72rem' }}>
+                Actualizado hace {opsAgeMin ?? 0} min
+              </span>
+            ) : null}
+          </div>
           <div className="ai-pf-timeline">
             {ops.length === 0 ? (
               <p className="ai-pf-muted">Sin operaciones.</p>
@@ -600,10 +660,12 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
               ops.map((o, i) => (
                 <div key={i} className="ai-pf-tl-item">
                   <span
-                    className={`ai-pf-tl-dot ${o.accion === 'COMPRÓ' ? 'ai-pf-tl-dot--buy' : 'ai-pf-tl-dot--sell'}`}
+                    className={`ai-pf-tl-dot ${
+                      o.accion === 'VENDIÓ' ? 'ai-pf-tl-dot--sell' : 'ai-pf-tl-dot--buy'
+                    }`}
                   />
                   <p className="ai-pf-tl-date">{o.fecha}</p>
-                  <p className={o.accion === 'COMPRÓ' ? 'ai-pf-gain' : 'ai-pf-loss'}>
+                  <p className={o.accion === 'VENDIÓ' ? 'ai-pf-loss' : 'ai-pf-gain'}>
                     {o.accion} <span className="ai-pf-tl-tick">{o.ticker}</span>
                   </p>
                   <p className="ai-pf-tl-reason">{o.razon}</p>
