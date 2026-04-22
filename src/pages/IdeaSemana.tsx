@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { AnalysisMarkdown } from '../lib/renderAnalysisMarkdown'
 
 const API = import.meta.env.VITE_API_URL ?? ''
-const LS_PF = 'ingeld_portfolio'
 
 type Idea = {
   ticker: string
@@ -46,40 +45,16 @@ function normConf(c: string): Idea['confianza'] {
   return 'Media'
 }
 
-function addIdeaToPortfolio(idea: Idea) {
-  const sym = idea.ticker.trim().toUpperCase()
-  if (!sym) return
-  try {
-    const raw = localStorage.getItem(LS_PF)
-    const parsed = raw ? JSON.parse(raw) : []
-    const arr = Array.isArray(parsed) ? [...parsed] : []
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-    arr.push({
-      id,
-      ticker: sym,
-      cantidad: 1,
-      precioCompra: idea.precio_entrada,
-      moneda: 'USD',
-      fechaCompra: new Date().toISOString().slice(0, 10),
-    })
-    localStorage.setItem(LS_PF, JSON.stringify(arr))
-  } catch {
-    /* noop */
-  }
-}
-
 export default function IdeaSemana() {
-  const navigate = useNavigate()
   const [idea, setIdea] = useState<Idea>(FALLBACK)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     setLoading(true)
     void (async () => {
       try {
         const res = await fetch(`${API}/api/market/idea-semanal`)
-        if (!res.ok) throw new Error(await res.text())
+        if (!res.ok) throw new Error('fetch')
         const j = (await res.json()) as Record<string, unknown>
         setIdea({
           ticker: String(j.ticker ?? FALLBACK.ticker).toUpperCase(),
@@ -94,8 +69,8 @@ export default function IdeaSemana() {
           confianza: normConf(String(j.confianza ?? 'Media')),
           fecha_generada: j.fecha_generada != null ? String(j.fecha_generada) : undefined,
         })
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'No se pudo cargar idea semanal')
+      } catch {
+        setIdea(FALLBACK)
       } finally {
         setLoading(false)
       }
@@ -120,7 +95,6 @@ export default function IdeaSemana() {
         {idea.fecha_generada ? `Actualizado: ${idea.fecha_generada}` : `Actualizado: ${new Date().toLocaleDateString('es-AR')}`}
       </p>
 
-      {error ? <p className="error-box">{error}</p> : null}
       {loading ? <p className="page-sub">Generando idea de esta semana…</p> : null}
 
       <article className="idea-card">
@@ -162,18 +136,11 @@ export default function IdeaSemana() {
 
         <div className="idea-actions">
           <Link className="portfolio-ai-btn" to={`/activo/${idea.ticker}`}>
-            Ver activo completo
+            Ver análisis completo
           </Link>
-          <button
-            type="button"
-            className="portfolio-refresh-btn"
-            onClick={() => {
-              addIdeaToPortfolio(idea)
-              void navigate('/portfolio')
-            }}
-          >
-            Agregar a portfolio
-          </button>
+          <Link className="portfolio-refresh-btn" to={`/stock-lab?ticker=${encodeURIComponent(idea.ticker)}`}>
+            Analizar en Stock Lab
+          </Link>
         </div>
 
         <p className="small-muted" style={{ marginTop: '1rem' }}>
