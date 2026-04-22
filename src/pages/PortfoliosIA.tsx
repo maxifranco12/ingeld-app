@@ -781,6 +781,50 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
     )
   }
 
+  const renderGeminiSoon = () => (
+    <div
+      className="ai-pf-card"
+      style={{
+        textAlign: 'center',
+        padding: '2.25rem 1.75rem',
+        maxWidth: '34rem',
+        margin: '0 auto',
+        borderColor: 'rgba(66, 133, 244, 0.35)',
+      }}
+    >
+      <div style={{ fontSize: '3.75rem', lineHeight: 1, marginBottom: '1.1rem' }} aria-hidden>
+        🤖
+      </div>
+      <h2 className="ai-pf-card-title" style={{ marginBottom: '0.85rem' }}>
+        Gemini Portfolio — Próximamente
+      </h2>
+      <p
+        className="ai-pf-muted"
+        style={{
+          margin: '0 auto 1.75rem',
+          maxWidth: '30rem',
+          lineHeight: 1.6,
+          fontSize: '0.9rem',
+          fontFamily: 'var(--font-prose)',
+        }}
+      >
+        Google Gemini no tiene un portfolio público gestionado en Autopilot todavía. Claude, Grok y GPT
+        son los únicos modelos con portfolios reales operando en la plataforma.
+        <br />
+        <br />
+        Cuando Gemini lance su portfolio oficial, INGELD lo agregará automáticamente.
+      </p>
+      <a
+        className="ai-pf-btn ai-pf-btn--primary"
+        href="https://joinautopilot.com"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Seguir en Autopilot
+      </a>
+    </div>
+  )
+
   return (
     <div className="ai-pf-page">
       <header className="ai-pf-hero">
@@ -821,8 +865,12 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
           </button>
         </div>
 
-        {tab !== 'comparar' && active ? renderDetail(active) : null}
         {tab === 'comparar' ? renderCompare() : null}
+        {tab === 'gemini'
+          ? renderGeminiSoon()
+          : tab !== 'comparar' && active
+            ? renderDetail(active)
+            : null}
       </div>
     </div>
   )

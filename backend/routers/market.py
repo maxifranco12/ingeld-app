@@ -1653,3 +1653,107 @@ def ai_operations() -> dict[str, Any]:
             ],
         }
     }
+
+
+_IDEA_SEMANAL_CACHE: dict[str, Any] = {"ts": 0.0, "payload": None}
+_IDEA_SEMANAL_TTL_SEC = 24 * 3600.0
+
+
+@router.get("/idea-semanal")
+def idea_semanal() -> dict[str, Any]:
+    """Idea semanal de compra generada por Claude (cache 24h)."""
+    now = time.time()
+    today = date.today()
+    is_weekend = today.weekday() >= 5
+    cached = _IDEA_SEMANAL_CACHE.get("payload")
+    ts = float(_IDEA_SEMANAL_CACHE.get("ts") or 0.0)
+
+    if is_weekend and cached is not None:
+        return copy.deepcopy(cached)
+
+    if cached is not None and now - ts < _IDEA_SEMANAL_TTL_SEC:
+        return copy.deepcopy(cached)
+
+    key = (os.getenv("ANTHROPIC_API_KEY") or "").strip()
+    if not key:
+        if cached is not None:
+            return copy.deepcopy(cached)
+        return {
+            "ticker": "AAPL",
+            "nombre": "Apple Inc.",
+            "señal": "COMPRAR",
+            "precio_entrada": 246,
+            "precio_objetivo": 280,
+            "stop_loss": 230,
+            "horizonte": "1-4 semanas",
+            "racional": (
+                "Idea fallback por falta de ANTHROPIC_API_KEY. "
+                "Configurá la variable para generar la idea semanal en vivo."
+            ),
+            "riesgo_principal": "Volatilidad macro y compresión de múltiplos.",
+            "confianza": "Media",
+            "fecha_generada": today.isoformat(),
+        }
+
+    prompt = """Sos un analista financiero senior. Es lunes.
+Analizá el mercado global (USA, emergentes, commodities)
+y elegí UN SOLO papel para comprar esta semana.
+
+Respondé en JSON:
+{
+  "ticker": "AAPL",
+  "nombre": "Apple Inc.",
+  "señal": "COMPRAR",
+  "precio_entrada": 246,
+  "precio_objetivo": 280,
+  "stop_loss": 230,
+  "horizonte": "1-4 semanas",
+  "racional": "3 párrafos explicando por qué",
+  "riesgo_principal": "una oración",
+  "confianza": "Alta|Media|Baja"
+}
+"""
+
+    try:
+        client = Anthropic(api_key=key)
+        msg = client.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=1000,
+            system="Respondé SOLO JSON válido, sin markdown.",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = ""
+        for block in msg.content:
+            if block.type == "text":
+                text += block.text
+        raw = text.strip()
+        if "```" in raw:
+            for chunk in raw.split("```"):
+                c = chunk.strip()
+                if c.lower().startswith("json"):
+                    c = c[4:].lstrip()
+                if c.startswith("{") and c.endswith("}"):
+                    raw = c
+                    break
+        data = json.loads(raw)
+    except Exception as e:  # noqa: BLE001
+        if cached is not None:
+            return copy.deepcopy(cached)
+        raise HTTPException(status_code=502, detail=f"No se pudo generar idea semanal: {e!s}") from e
+
+    payload = {
+        "ticker": str(data.get("ticker") or "AAPL").upper(),
+        "nombre": str(data.get("nombre") or "Apple Inc.").strip(),
+        "señal": str(data.get("señal") or "COMPRAR").upper(),
+        "precio_entrada": float(data.get("precio_entrada") or 0),
+        "precio_objetivo": float(data.get("precio_objetivo") or 0),
+        "stop_loss": float(data.get("stop_loss") or 0),
+        "horizonte": str(data.get("horizonte") or "1-4 semanas").strip(),
+        "racional": str(data.get("racional") or "").strip(),
+        "riesgo_principal": str(data.get("riesgo_principal") or "").strip(),
+        "confianza": str(data.get("confianza") or "Media").title(),
+        "fecha_generada": today.isoformat(),
+    }
+    _IDEA_SEMANAL_CACHE["ts"] = now
+    _IDEA_SEMANAL_CACHE["payload"] = copy.deepcopy(payload)
+    return payload

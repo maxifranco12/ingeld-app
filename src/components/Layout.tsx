@@ -6,6 +6,7 @@ import { TickerTape } from './TickerTape'
 const navBeforePf: { to: string; label: string; end?: boolean }[] = [
   { to: '/panel', label: 'Panel', end: true },
   { to: '/buscador', label: 'Buscador' },
+  { to: '/stock-lab', label: 'Stock Lab' },
   { to: '/scanner', label: 'Scanner' },
   { to: '/favoritos', label: 'Favoritos' },
 ]
@@ -14,6 +15,7 @@ const navAfterPf: { to: string; label: string; end?: boolean }[] = [
   { to: '/alertas', label: 'Alertas' },
   { to: '/analisis', label: 'Análisis' },
   { to: '/portfolios-ia', label: 'Portfolios IA' },
+  { to: '/idea-semanal', label: '💡 Idea' },
   { to: '/comparador', label: 'Comparador' },
 ]
 

@@ -21,6 +21,8 @@ import { Historial } from './pages/Historial'
 import { Metas } from './pages/Metas'
 import { NetWorth } from './pages/NetWorth'
 import PortfoliosIA from './pages/PortfoliosIA'
+import StockLab from './pages/StockLab'
+import IdeaSemana from './pages/IdeaSemana'
 
 function RootRoute() {
   const { isAuthenticated, loading } = useAuth()
@@ -54,6 +56,8 @@ export default function App() {
             <Route path="metas" element={<Metas />} />
             <Route path="networth" element={<NetWorth />} />
             <Route path="portfolios-ia" element={<PortfoliosIA />} />
+            <Route path="stock-lab" element={<StockLab />} />
+            <Route path="idea-semanal" element={<IdeaSemana />} />
             <Route path="admin" element={<AdminOnly />} />
           </Route>
         </Route>
