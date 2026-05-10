@@ -15,6 +15,8 @@ import {
 import { AnalysisMarkdown } from '../lib/renderAnalysisMarkdown'
 import { useAuth } from '../context/AuthContext'
 
+const API = import.meta.env.VITE_API_URL ?? ''
+
 type Posicion = {
   ticker: string
   nombre: string
@@ -370,6 +372,7 @@ export default function PortfoliosIA() {
   const [portfolios, setPortfolios] = useState<PortfolioIA[]>(HARDCODED.portfolios)
   const [ingeldPortfolio, setIngeldPortfolio] = useState<IngeldPortfolio | null>(null)
   const [ingeldLoading, setIngeldLoading] = useState(false)
+  const [ingeldError, setIngeldError] = useState(false)
   const [iaOverrides, setIaOverrides] = useState<OverridesFile>(() => readIaOverrides())
   const mergedPortfolios = useMemo(
     () => applyIaOverrides(portfolios, iaOverrides),
@@ -462,11 +465,41 @@ export default function PortfoliosIA() {
 
   const loadIngeldPortfolio = useCallback(async (force = false) => {
     setIngeldLoading(true)
+    setIngeldError(false)
     try {
-      const res = await fetch(`/api/market/ingeld-portfolio${force ? '?force=true' : ''}`)
-      if (!res.ok) return
-      const j = (await res.json()) as IngeldPortfolio
-      setIngeldPortfolio(j)
+      const res = await fetch(`${API}/api/market/ingeld-portfolio${force ? '?force=true' : ''}`)
+      if (!res.ok) throw new Error('ingeld')
+      const data = (await res.json()) as Record<string, unknown>
+      console.log('INGELD portfolio response:', data)
+      const rawPos = Array.isArray(data.posiciones) ? data.posiciones : []
+      const posiciones: Posicion[] = rawPos.map((p) => {
+        const x = p as Record<string, unknown>
+        return {
+          ticker: String(x.ticker ?? '').toUpperCase(),
+          nombre: String(x.nombre ?? x.ticker ?? ''),
+          peso: Number(x.peso ?? 0),
+          sector: String(x.sector ?? 'Other'),
+          razon: x.razon != null ? String(x.razon) : undefined,
+          precio_actual:
+            x.precio_actual != null && Number.isFinite(Number(x.precio_actual))
+              ? Number(x.precio_actual)
+              : undefined,
+        }
+      }).filter((p) => p.ticker)
+      const mapped: IngeldPortfolio = {
+        id: 'ingeld',
+        nombre: String(data.nombre ?? 'INGELD Portfolio Semana IA'),
+        fecha: String(data.fecha ?? dateLabelToday()),
+        tesis: String(data.tesis ?? ''),
+        posiciones,
+        riesgo_principal: String(data.riesgo_principal ?? ''),
+        retorno_esperado: String(data.retorno_esperado ?? ''),
+        benchmark: String(data.benchmark ?? 'SPY').toUpperCase(),
+      }
+      setIngeldPortfolio(mapped)
+      setIngeldError(false)
+    } catch {
+      setIngeldError(true)
     } finally {
       setIngeldLoading(false)
     }
@@ -1211,11 +1244,28 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
         </div>
 
         {tab === 'comparar' ? renderCompare() : null}
+        {tab === 'ingeld' && ingeldLoading ? (
+          <div className="ai-pf-card" style={{ textAlign: 'center', padding: '2rem 1.5rem', maxWidth: '36rem', margin: '1rem auto 0' }}>
+            <div style={{ fontSize: '1.35rem', marginBottom: '0.65rem' }}>⏳</div>
+            <p className="font-prose">Generando portfolio INGELD...</p>
+          </div>
+        ) : null}
+        {tab === 'ingeld' && !ingeldLoading && ingeldError ? (
+          <div className="ai-pf-card" style={{ textAlign: 'center', padding: '2rem 1.5rem', maxWidth: '36rem', margin: '1rem auto 0' }}>
+            <p className="font-prose" style={{ marginBottom: '0.9rem' }}>
+              No se pudo cargar el portfolio. Intentá de nuevo.
+            </p>
+            <button type="button" className="ai-pf-btn ai-pf-btn--primary" onClick={() => void loadIngeldPortfolio(true)}>
+              Reintentar
+            </button>
+          </div>
+        ) : null}
         {tab === 'gemini'
           ? renderGeminiSoon()
-          : tab !== 'comparar' && active
+          : tab !== 'comparar' && tab !== 'ingeld' && active
             ? renderDetail(active)
             : null}
+        {tab === 'ingeld' && !ingeldLoading && !ingeldError && active ? renderDetail(active) : null}
       </div>
 
       {pfEditId && isAdmin ? (
