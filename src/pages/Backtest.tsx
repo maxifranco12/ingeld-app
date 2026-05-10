@@ -1,8 +1,17 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { AnalysisMarkdown } from '../lib/renderAnalysisMarkdown'
 
 const API = import.meta.env.VITE_API_URL ?? ''
+
+const DEBOUNCE_MS = 400
+
+type SearchHit = {
+  symbol: string
+  name: string
+  exchange?: string
+  type?: string
+}
 
 const STRATEGIES: { id: string; label: string }[] = [
   { id: 'rsi30', label: 'Comprar cuando RSI < 30' },
@@ -36,12 +45,67 @@ type BacktestRes = {
 
 export default function Backtest() {
   const [ticker, setTicker] = useState('SPY')
+  const [hits, setHits] = useState<SearchHit[]>([])
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchLoading, setSearchLoading] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
   const [estrategia, setEstrategia] = useState('rsi30')
   const [periodo, setPeriodo] = useState<'1Y' | '3Y' | '5Y'>('1Y')
   const [capital, setCapital] = useState(10000)
   const [loading, setLoading] = useState(false)
   const [res, setRes] = useState<BacktestRes | null>(null)
   const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const v = ticker.trim()
+    if (!v) {
+      setHits([])
+      setSearchLoading(false)
+      return () => {
+        cancelled = true
+      }
+    }
+    const t = window.setTimeout(() => {
+      setSearchLoading(true)
+      ;(async () => {
+        try {
+          const res = await fetch(`${API}/api/market/search?q=${encodeURIComponent(v)}`)
+          if (cancelled || !res.ok) return
+          const raw = await res.json()
+          const list = Array.isArray(raw)
+            ? raw
+            : ((raw as { items?: SearchHit[] }).items ?? [])
+          const mapped = list
+            .map((h) => ({
+              symbol: String((h as SearchHit).symbol ?? '').trim(),
+              name: String((h as SearchHit).name ?? '').trim(),
+              exchange: (h as SearchHit).exchange,
+              type: (h as SearchHit).type,
+            }))
+            .filter((h) => h.symbol)
+          if (!cancelled) setHits(mapped.slice(0, 6))
+        } catch {
+          if (!cancelled) setHits([])
+        } finally {
+          if (!cancelled) setSearchLoading(false)
+        }
+      })()
+    }, DEBOUNCE_MS)
+    return () => {
+      cancelled = true
+      window.clearTimeout(t)
+    }
+  }, [ticker])
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (!wrapRef.current?.contains(e.target as Node)) setSearchOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
 
   const run = async () => {
     setLoading(true)
@@ -68,9 +132,58 @@ export default function Backtest() {
       <p className="page-sub">Simulación histórica: entrada en señal, salida a 30 sesiones.</p>
 
       <div className="backtest-form panel">
-        <label className="font-prose">
+        <label className="font-prose" style={{ gridColumn: 'span 2', maxWidth: '24rem' }}>
           Ticker
-          <input value={ticker} onChange={(e) => setTicker(e.target.value.toUpperCase())} />
+          <div className="buscador-search-wrap" ref={wrapRef} style={{ margin: '0.35rem 0 0', maxWidth: '100%' }}>
+            <input
+              className="buscador-input"
+              value={ticker}
+              onChange={(e) => {
+                setTicker(e.target.value)
+                setSearchOpen(true)
+              }}
+              onFocus={() => setSearchOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return
+                e.preventDefault()
+                setSearchOpen(false)
+                void run()
+              }}
+              placeholder="Ticker o empresa — ej: SPY, AAPL"
+              aria-label="Ticker para backtest"
+              autoComplete="off"
+            />
+            {searchOpen && (ticker.trim() || searchLoading) && (
+              <div className="buscador-dropdown" role="listbox">
+                {searchLoading && (
+                  <div className="buscador-dd-muted font-prose">Buscando…</div>
+                )}
+                {!searchLoading &&
+                  hits.slice(0, 6).map((h) => (
+                    <button
+                      key={h.symbol}
+                      type="button"
+                      role="option"
+                      className="buscador-dd-item"
+                      onClick={() => {
+                        setTicker(h.symbol)
+                        setSearchOpen(false)
+                      }}
+                    >
+                      <span className="buscador-dd-name font-prose">{h.name || h.symbol}</span>
+                      <span className="buscador-dd-meta">
+                        <strong>{h.symbol}</strong>
+                        {h.exchange ? ` · ${h.exchange}` : ''}
+                        {h.type ? ` · ${h.type}` : ''}
+                      </span>
+                    </button>
+                  ))}
+                {!searchLoading && ticker.trim() && hits.length === 0 && (
+                  <div className="buscador-dd-muted font-prose">Sin resultados.</div>
+                )}
+              </div>
+            )}
+          </div>
         </label>
         <label className="font-prose">
           Estrategia

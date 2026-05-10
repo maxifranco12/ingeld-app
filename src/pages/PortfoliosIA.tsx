@@ -13,6 +13,7 @@ import {
   YAxis,
 } from 'recharts'
 import { AnalysisMarkdown } from '../lib/renderAnalysisMarkdown'
+import { useAuth } from '../context/AuthContext'
 
 type Posicion = {
   ticker: string
@@ -34,6 +35,30 @@ type PortfolioIA = {
   color: string
   posiciones: Posicion[]
 }
+
+type OperacionRow = {
+  fecha: string
+  accion: string
+  ticker: string
+  razon: string
+}
+
+const IA_OVERRIDES_LS = 'ingeld_portfolio_ia_overrides'
+
+/** URLs oficiales en Autopilot por portfolio */
+const AUTOPILOT_URL_BY_ID: Record<string, string> = {
+  claude: 'https://joinautopilot.com/landing/5/950048',
+  grok: 'https://marketplace.joinautopilot.com/landing/5/568906',
+  gpt: 'https://www.joinautopilot.com/landing/5/63080',
+}
+
+type PortfolioIAOverride = {
+  capital_actual?: number
+  posiciones?: Posicion[]
+  operaciones?: OperacionRow[]
+}
+
+type OverridesFile = Record<string, PortfolioIAOverride>
 
 const HARDCODED: { portfolios: PortfolioIA[] } = {
   portfolios: [
@@ -63,7 +88,7 @@ const HARDCODED: { portfolios: PortfolioIA[] } = {
       nombre: 'Grok Portfolio',
       gestor: 'xAI Grok',
       plataforma: 'Autopilot',
-      url: 'https://joinautopilot.com',
+      url: 'https://marketplace.joinautopilot.com/landing/5/568906',
       twitter: '@grokportfolio',
       capital_inicial: 50000,
       capital_actual: 50000,
@@ -89,7 +114,7 @@ const HARDCODED: { portfolios: PortfolioIA[] } = {
       nombre: 'GPT Portfolio',
       gestor: 'OpenAI GPT-4',
       plataforma: 'Autopilot',
-      url: 'https://joinautopilot.com',
+      url: 'https://www.joinautopilot.com/landing/5/63080',
       twitter: '@gptportfolio',
       capital_inicial: 50000,
       capital_actual: 50000,
@@ -98,13 +123,6 @@ const HARDCODED: { portfolios: PortfolioIA[] } = {
       posiciones: [],
     },
   ],
-}
-
-type OperacionRow = {
-  fecha: string
-  accion: string
-  ticker: string
-  razon: string
 }
 
 const LAST_OPS: Record<string, OperacionRow[]> = {
@@ -138,6 +156,50 @@ const LAST_OPS: Record<string, OperacionRow[]> = {
   ],
   gemini: [],
   gpt: [],
+}
+
+function readIaOverrides(): OverridesFile {
+  try {
+    const raw = localStorage.getItem(IA_OVERRIDES_LS)
+    if (!raw) return {}
+    const j = JSON.parse(raw) as OverridesFile
+    return j && typeof j === 'object' && !Array.isArray(j) ? j : {}
+  } catch {
+    return {}
+  }
+}
+
+function writeIaOverrides(data: OverridesFile) {
+  try {
+    localStorage.setItem(IA_OVERRIDES_LS, JSON.stringify(data))
+  } catch {
+    /* noop */
+  }
+}
+
+function applyIaOverrides(portfolios: PortfolioIA[], ov: OverridesFile): PortfolioIA[] {
+  return portfolios.map((p) => {
+    const url = AUTOPILOT_URL_BY_ID[p.id] ?? p.url
+    const o = ov[p.id]
+    if (!o) return { ...p, url }
+    return {
+      ...p,
+      url,
+      ...(typeof o.capital_actual === 'number' && Number.isFinite(o.capital_actual)
+        ? { capital_actual: o.capital_actual }
+        : {}),
+      ...(o.posiciones != null ? { posiciones: o.posiciones } : {}),
+    }
+  })
+}
+
+function getOpsForPortfolio(
+  id: string,
+  ov: OverridesFile,
+  remoteOps: Record<string, OperacionRow[]> | null,
+): OperacionRow[] {
+  if (ov[id]?.operaciones != null) return ov[id]!.operaciones!
+  return remoteOps === null ? (LAST_OPS[id] ?? []) : (remoteOps[id] ?? [])
 }
 
 type QuoteRow = {
@@ -282,8 +344,21 @@ function estVol(series: number[]): number {
 }
 
 export default function PortfoliosIA() {
+  const { isAdmin } = useAuth()
   const [tab, setTab] = useState<TabId>('claude')
   const [portfolios, setPortfolios] = useState<PortfolioIA[]>(HARDCODED.portfolios)
+  const [iaOverrides, setIaOverrides] = useState<OverridesFile>(() => readIaOverrides())
+  const mergedPortfolios = useMemo(
+    () => applyIaOverrides(portfolios, iaOverrides),
+    [portfolios, iaOverrides],
+  )
+  const [pfEditId, setPfEditId] = useState<string | null>(null)
+  const [editCap, setEditCap] = useState('')
+  const [editPosRows, setEditPosRows] = useState<{ ticker: string; peso: string }[]>([])
+  const [editOpRows, setEditOpRows] = useState<
+    { fecha: string; accion: string; ticker: string; razon: string }[]
+  >([])
+
   const [quotes, setQuotes] = useState<Record<string, QuoteRow>>({})
   const [spyBench, setSpyBench] = useState<number | null>(null)
   const [analysis, setAnalysis] = useState<string | null>(null)
@@ -295,11 +370,36 @@ export default function PortfoliosIA() {
   const [opsMetaTick, setOpsMetaTick] = useState(0)
 
   const ordered = useMemo(
-    () => TAB_ORDER.map((id) => portfolios.find((p) => p.id === id)).filter(Boolean) as PortfolioIA[],
-    [portfolios],
+    () => TAB_ORDER.map((id) => mergedPortfolios.find((p) => p.id === id)).filter(Boolean) as PortfolioIA[],
+    [mergedPortfolios],
   )
 
-  const active = portfolios.find((p) => p.id === tab)
+  const active = mergedPortfolios.find((p) => p.id === tab)
+
+  useEffect(() => {
+    if (!pfEditId) return
+    const p = mergedPortfolios.find((x) => x.id === pfEditId)
+    if (!p) return
+    setEditCap(String(p.capital_actual))
+    setEditPosRows(
+      p.posiciones.length
+        ? p.posiciones.map((x) => ({ ticker: x.ticker, peso: String(x.peso) }))
+        : [{ ticker: '', peso: '' }],
+    )
+    const ops = getOpsForPortfolio(pfEditId, iaOverrides, remoteOps)
+    setEditOpRows(
+      ops.length
+        ? ops.map((o) => ({
+            fecha: o.fecha,
+            accion: o.accion,
+            ticker: o.ticker,
+            razon: o.razon,
+          }))
+        : [{ fecha: '', accion: 'COMPRÓ', ticker: '', razon: '' }],
+    )
+    // Solo al cambiar modal de portfolio — evita pisar cambios cuando llegan datos remotos
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pfEditId])
 
   useEffect(() => {
     let c = false
@@ -346,17 +446,17 @@ export default function PortfoliosIA() {
   }, [])
 
   useEffect(() => {
-    const syms = quoteSymbolsFromPortfolios(portfolios)
+    const syms = quoteSymbolsFromPortfolios(mergedPortfolios)
     void loadQuotes(syms)
-  }, [portfolios, loadQuotes])
+  }, [mergedPortfolios, loadQuotes])
 
   useEffect(() => {
-    const syms = quoteSymbolsFromPortfolios(portfolios)
+    const syms = quoteSymbolsFromPortfolios(mergedPortfolios)
     const id = window.setInterval(() => {
       void loadQuotes(syms)
     }, 30_000)
     return () => clearInterval(id)
-  }, [portfolios, loadQuotes])
+  }, [mergedPortfolios, loadQuotes])
 
   const fetchOperations = useCallback(async () => {
     try {
@@ -460,18 +560,110 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
     }
   }
 
+  const saveIaPortfolioOverride = useCallback(() => {
+    if (!pfEditId) return
+    let cap = Number(String(editCap).replace(/\s/g, '').replace(',', '.'))
+    const baseP = mergedPortfolios.find((x) => x.id === pfEditId)
+    if (!Number.isFinite(cap) && baseP) cap = baseP.capital_actual
+    if (!Number.isFinite(cap)) cap = 0
+
+    const posiciones: Posicion[] = editPosRows
+      .filter((r) => r.ticker.trim())
+      .map((r) => {
+        const ticker = r.ticker.trim().toUpperCase()
+        const prev = baseP?.posiciones.find((y) => y.ticker.toUpperCase() === ticker)
+        let peso = Number(String(r.peso).replace(/\s/g, '').replace(',', '.'))
+        if (!Number.isFinite(peso)) peso = 0
+        return {
+          ticker,
+          nombre: prev?.nombre ?? ticker,
+          peso,
+          sector: prev?.sector ?? '—',
+        }
+      })
+
+    const operaciones: OperacionRow[] = editOpRows
+      .filter((r) => r.fecha.trim() && r.ticker.trim())
+      .map((r) => ({
+        fecha: r.fecha.trim().slice(0, 10),
+        accion: (r.accion.trim() || 'COMPRÓ').toUpperCase(),
+        ticker: r.ticker.trim().toUpperCase(),
+        razon: r.razon.trim(),
+      }))
+
+    const next: OverridesFile = {
+      ...iaOverrides,
+      [pfEditId]: { capital_actual: cap, posiciones, operaciones },
+    }
+    writeIaOverrides(next)
+    setIaOverrides(next)
+    setPfEditId(null)
+  }, [pfEditId, editCap, editPosRows, editOpRows, iaOverrides, mergedPortfolios])
+
   const renderDetail = (p: PortfolioIA) => {
     const ret = totalReturnPct(p)
     const retHoy = weightedDayReturnPct(p, quotes)
     const vsSpy = spyBench != null ? Math.round((ret - spyBench) * 100) / 100 : null
     const dias = daysActive(p.inicio)
     const pie = sectorPie(p.posiciones)
-    const ops =
-      remoteOps === null ? (LAST_OPS[p.id] ?? []) : (remoteOps[p.id] ?? [])
+    const ops = getOpsForPortfolio(p.id, iaOverrides, remoteOps)
     const accent = p.color
+    const autopilotUrl = p.url
 
     return (
       <div className="ai-pf-stack">
+        <div
+          className="ai-pf-banner-weekly font-prose"
+          style={{
+            padding: '0.75rem 1rem',
+            borderRadius: 8,
+            background: 'rgba(0, 168, 122, 0.1)',
+            border: '1px solid rgba(0, 168, 122, 0.35)',
+            fontSize: '0.9rem',
+            lineHeight: 1.5,
+            color: 'var(--text-heading)',
+          }}
+        >
+          📊 Datos actualizados semanalmente · Para ver el portfolio en tiempo real visitá{' '}
+          <a href={autopilotUrl} target="_blank" rel="noopener noreferrer">
+            Autopilot
+          </a>
+        </div>
+
+        {isAdmin ? (
+          <div style={{ marginTop: '0.65rem' }}>
+            <button
+              type="button"
+              className="portfolio-refresh-btn"
+              onClick={() => setPfEditId(p.id)}
+            >
+              🔄 Actualizar datos
+            </button>
+          </div>
+        ) : null}
+
+        <a
+          href={autopilotUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'block',
+            textAlign: 'center',
+            padding: '0.95rem 1.25rem',
+            marginTop: '0.85rem',
+            marginBottom: '1rem',
+            fontSize: '1.06rem',
+            fontWeight: 700,
+            background: '#00a87a',
+            color: '#fff',
+            borderRadius: 'var(--radius)',
+            textDecoration: 'none',
+            boxShadow: '0 4px 14px rgba(0, 168, 122, 0.35)',
+          }}
+        >
+          Ver portfolio en vivo en Autopilot →
+        </a>
+
         <article className="ai-pf-card" style={{ borderColor: `${accent}44` }}>
           <div className="ai-pf-card-head">
             <span
@@ -537,9 +729,6 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
             </div>
           </div>
           <div className="ai-pf-actions">
-            <a className="ai-pf-btn ai-pf-btn--primary" href={p.url} target="_blank" rel="noreferrer">
-              Autopilot
-            </a>
             <a
               className="ai-pf-btn ai-pf-btn--ghost"
               href={`https://twitter.com/${p.twitter.replace('@', '')}`}
@@ -795,6 +984,27 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
       <div style={{ fontSize: '3.75rem', lineHeight: 1, marginBottom: '1.1rem' }} aria-hidden>
         🤖
       </div>
+      <div
+        className="font-prose"
+        style={{
+          padding: '0.75rem 1rem',
+          borderRadius: 8,
+          marginBottom: '1.25rem',
+          background: 'rgba(0, 168, 122, 0.1)',
+          border: '1px solid rgba(0, 168, 122, 0.35)',
+          fontSize: '0.88rem',
+          lineHeight: 1.55,
+          textAlign: 'left',
+          maxWidth: '34rem',
+          marginLeft: 'auto',
+          marginRight: 'auto',
+        }}
+      >
+        📊 Datos actualizados semanalmente · Para ver un portfolio IA en tiempo real visitá{' '}
+        <a href="https://joinautopilot.com" target="_blank" rel="noopener noreferrer">
+          Autopilot
+        </a>
+      </div>
       <h2 className="ai-pf-card-title" style={{ marginBottom: '0.85rem' }}>
         Gemini Portfolio — Próximamente
       </h2>
@@ -872,6 +1082,200 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
             ? renderDetail(active)
             : null}
       </div>
+
+      {pfEditId && isAdmin ? (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.48)',
+            zIndex: 400,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1rem',
+          }}
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setPfEditId(null)
+          }}
+        >
+          <div
+            className="panel"
+            style={{
+              position: 'relative',
+              maxWidth: 560,
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              padding: '1.25rem',
+              boxSizing: 'border-box',
+              background: 'var(--bg-card)',
+              borderRadius: 'var(--radius)',
+            }}
+            role="dialog"
+            aria-labelledby="pf-edit-title"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h2 id="pf-edit-title" className="ai-pf-h3">
+              Actualizar datos (admin){' '}
+              <span style={{ fontWeight: 400, opacity: 0.85 }}>
+                (
+                {pfEditId in TAB_LABEL ? TAB_LABEL[pfEditId as keyof typeof TAB_LABEL] : pfEditId})
+              </span>
+            </h2>
+            <p className="page-sub font-prose" style={{ marginTop: '-0.25rem' }}>
+              Se guarda en <code>{IA_OVERRIDES_LS}</code>.
+            </p>
+
+            <label className="font-prose" style={{ display: 'block', marginTop: '1rem' }}>
+              Capital actual
+              <input
+                type="text"
+                value={editCap}
+                onChange={(e) => setEditCap(e.target.value)}
+                style={{ width: '100%', marginTop: '0.35rem' }}
+              />
+            </label>
+
+            <h3 className="ai-pf-h3" style={{ marginTop: '1.25rem' }}>
+              Posiciones (ticker + peso %)
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {editPosRows.map((row, i) => (
+                <div key={i} style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <input
+                    placeholder="Ticker"
+                    value={row.ticker}
+                    onChange={(e) => {
+                      const next = [...editPosRows]
+                      next[i] = { ...next[i], ticker: e.target.value }
+                      setEditPosRows(next)
+                    }}
+                    style={{ flex: '1 1 100px', minWidth: '6rem' }}
+                  />
+                  <input
+                    placeholder="% peso"
+                    value={row.peso}
+                    onChange={(e) => {
+                      const next = [...editPosRows]
+                      next[i] = { ...next[i], peso: e.target.value }
+                      setEditPosRows(next)
+                    }}
+                    style={{ width: '5.5rem' }}
+                  />
+                  <button
+                    type="button"
+                    className="favoritos-quitar"
+                    onClick={() =>
+                      setEditPosRows(editPosRows.filter((_, j) => j !== i))
+                    }
+                  >
+                    −
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="portfolio-ai-btn"
+                style={{ alignSelf: 'flex-start', marginTop: '0.25rem' }}
+                onClick={() => setEditPosRows([...editPosRows, { ticker: '', peso: '' }])}
+              >
+                + Agregar posición
+              </button>
+            </div>
+
+            <h3 className="ai-pf-h3" style={{ marginTop: '1.25rem' }}>
+              Operaciones (fecha · acción · ticker · razón)
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {editOpRows.map((row, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '0.5rem',
+                    borderBottom: '1px solid var(--border-subtle)',
+                    paddingBottom: '0.5rem',
+                  }}
+                >
+                  <input
+                    type="text"
+                    placeholder="Fecha YYYY-MM-DD"
+                    value={row.fecha}
+                    onChange={(e) => {
+                      const next = [...editOpRows]
+                      next[i] = { ...next[i], fecha: e.target.value }
+                      setEditOpRows(next)
+                    }}
+                  />
+                  <input
+                    placeholder="Acción ej. COMPRÓ"
+                    value={row.accion}
+                    onChange={(e) => {
+                      const next = [...editOpRows]
+                      next[i] = { ...next[i], accion: e.target.value }
+                      setEditOpRows(next)
+                    }}
+                  />
+                  <input
+                    placeholder="Ticker"
+                    value={row.ticker}
+                    onChange={(e) => {
+                      const next = [...editOpRows]
+                      next[i] = { ...next[i], ticker: e.target.value }
+                      setEditOpRows(next)
+                    }}
+                  />
+                  <input
+                    placeholder="Razón"
+                    value={row.razon}
+                    onChange={(e) => {
+                      const next = [...editOpRows]
+                      next[i] = { ...next[i], razon: e.target.value }
+                      setEditOpRows(next)
+                    }}
+                    style={{ gridColumn: '1 / -1' }}
+                  />
+                  <button
+                    type="button"
+                    className="favoritos-quitar"
+                    style={{ gridColumn: '1 / -1', justifySelf: 'start' }}
+                    onClick={() =>
+                      setEditOpRows(editOpRows.filter((_, j) => j !== i))
+                    }
+                  >
+                    Quitar operación
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="portfolio-ai-btn"
+                style={{ alignSelf: 'flex-start' }}
+                onClick={() =>
+                  setEditOpRows([
+                    ...editOpRows,
+                    { fecha: '', accion: 'COMPRÓ', ticker: '', razon: '' },
+                  ])
+                }
+              >
+                + Agregar operación
+              </button>
+            </div>
+
+            <div style={{ marginTop: '1.35rem', display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
+              <button type="button" className="portfolio-ai-btn" onClick={() => void saveIaPortfolioOverride()}>
+                Guardar
+              </button>
+              <button type="button" className="portfolio-refresh-btn" onClick={() => setPfEditId(null)}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
