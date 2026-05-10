@@ -624,7 +624,7 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
             color: 'var(--text-heading)',
           }}
         >
-          📊 Datos actualizados semanalmente · Para ver el portfolio en tiempo real visitá{' '}
+          📊 Posiciones y retornos basados en datos públicos de Autopilot · Actualización semanal{' '}
           <a href={autopilotUrl} target="_blank" rel="noopener noreferrer">
             Autopilot
           </a>
@@ -661,8 +661,22 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
             boxShadow: '0 4px 14px rgba(0, 168, 122, 0.35)',
           }}
         >
-          Ver portfolio en vivo en Autopilot →
+          Invertir con este portfolio en Autopilot →
         </a>
+        <p
+          className="font-prose"
+          style={{
+            marginTop: '-0.25rem',
+            marginBottom: '1rem',
+            fontSize: '0.86rem',
+            lineHeight: 1.5,
+            color: 'var(--text-muted)',
+          }}
+        >
+          Para copiar las operaciones automáticamente necesitás crear cuenta en Autopilot
+          ($29/trimestre). Los datos de posiciones que ves acá se actualizan semanalmente
+          desde fuentes públicas.
+        </p>
 
         <article className="ai-pf-card" style={{ borderColor: `${accent}44` }}>
           <div className="ai-pf-card-head">
