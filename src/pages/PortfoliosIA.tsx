@@ -20,6 +20,8 @@ type Posicion = {
   nombre: string
   peso: number
   sector: string
+  razon?: string
+  precio_actual?: number
 }
 
 type PortfolioIA = {
@@ -34,6 +36,17 @@ type PortfolioIA = {
   inicio: string
   color: string
   posiciones: Posicion[]
+}
+
+type IngeldPortfolio = {
+  id: 'ingeld'
+  nombre: string
+  fecha: string
+  tesis: string
+  posiciones: Posicion[]
+  riesgo_principal: string
+  retorno_esperado: string
+  benchmark: string
 }
 
 type OperacionRow = {
@@ -210,10 +223,11 @@ type QuoteRow = {
   currency?: string
 }
 
-const TAB_ORDER = ['claude', 'grok', 'gemini', 'gpt'] as const
+const TAB_ORDER = ['ingeld', 'claude', 'grok', 'gemini', 'gpt'] as const
 type TabId = (typeof TAB_ORDER)[number] | 'comparar'
 
 const TAB_LABEL: Record<Exclude<TabId, 'comparar'>, string> = {
+  ingeld: 'INGELD',
   claude: 'Claude',
   grok: 'Grok',
   gemini: 'Gemini',
@@ -221,6 +235,7 @@ const TAB_LABEL: Record<Exclude<TabId, 'comparar'>, string> = {
 }
 
 const TAB_STYLE: Record<Exclude<TabId, 'comparar'>, string> = {
+  ingeld: 'ai-pf-tab--claude',
   claude: 'ai-pf-tab--claude',
   grok: 'ai-pf-tab--grok',
   gemini: 'ai-pf-tab--gemini',
@@ -228,6 +243,7 @@ const TAB_STYLE: Record<Exclude<TabId, 'comparar'>, string> = {
 }
 
 const LINE_STROKE: Record<string, string> = {
+  ingeld: '#00a87a',
   claude: '#00a87a',
   grok: '#6366f1',
   gemini: '#4285f4',
@@ -235,6 +251,7 @@ const LINE_STROKE: Record<string, string> = {
 }
 
 const COL_TOP: Record<string, string> = {
+  ingeld: 'ai-pf-compare-col--claude',
   claude: 'ai-pf-compare-col--claude',
   grok: 'ai-pf-compare-col--grok',
   gemini: 'ai-pf-compare-col--gemini',
@@ -343,15 +360,40 @@ function estVol(series: number[]): number {
   return Math.round(v * Math.sqrt(252) * 100 * 10) / 10
 }
 
+function dateLabelToday(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
 export default function PortfoliosIA() {
   const { isAdmin } = useAuth()
-  const [tab, setTab] = useState<TabId>('claude')
+  const [tab, setTab] = useState<TabId>('ingeld')
   const [portfolios, setPortfolios] = useState<PortfolioIA[]>(HARDCODED.portfolios)
+  const [ingeldPortfolio, setIngeldPortfolio] = useState<IngeldPortfolio | null>(null)
+  const [ingeldLoading, setIngeldLoading] = useState(false)
   const [iaOverrides, setIaOverrides] = useState<OverridesFile>(() => readIaOverrides())
   const mergedPortfolios = useMemo(
     () => applyIaOverrides(portfolios, iaOverrides),
     [portfolios, iaOverrides],
   )
+  const allPortfolios = useMemo(() => {
+    const base = mergedPortfolios.filter((p) => p.id !== 'ingeld')
+    if (ingeldPortfolio) {
+      base.unshift({
+        id: 'ingeld',
+        nombre: 'Portfolio INGELD',
+        gestor: 'INGELD IA',
+        plataforma: 'INGELD',
+        url: 'https://joinautopilot.com',
+        twitter: '@ingeld',
+        capital_inicial: 100,
+        capital_actual: 100,
+        inicio: ingeldPortfolio.fecha || dateLabelToday(),
+        color: '#00a87a',
+        posiciones: ingeldPortfolio.posiciones ?? [],
+      })
+    }
+    return base
+  }, [mergedPortfolios, ingeldPortfolio])
   const [pfEditId, setPfEditId] = useState<string | null>(null)
   const [editCap, setEditCap] = useState('')
   const [editPosRows, setEditPosRows] = useState<{ ticker: string; peso: string }[]>([])
@@ -370,11 +412,11 @@ export default function PortfoliosIA() {
   const [opsMetaTick, setOpsMetaTick] = useState(0)
 
   const ordered = useMemo(
-    () => TAB_ORDER.map((id) => mergedPortfolios.find((p) => p.id === id)).filter(Boolean) as PortfolioIA[],
-    [mergedPortfolios],
+    () => TAB_ORDER.map((id) => allPortfolios.find((p) => p.id === id)).filter(Boolean) as PortfolioIA[],
+    [allPortfolios],
   )
 
-  const active = mergedPortfolios.find((p) => p.id === tab)
+  const active = allPortfolios.find((p) => p.id === tab)
 
   useEffect(() => {
     if (!pfEditId) return
@@ -418,6 +460,22 @@ export default function PortfoliosIA() {
     }
   }, [])
 
+  const loadIngeldPortfolio = useCallback(async (force = false) => {
+    setIngeldLoading(true)
+    try {
+      const res = await fetch(`/api/market/ingeld-portfolio${force ? '?force=true' : ''}`)
+      if (!res.ok) return
+      const j = (await res.json()) as IngeldPortfolio
+      setIngeldPortfolio(j)
+    } finally {
+      setIngeldLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadIngeldPortfolio(false)
+  }, [loadIngeldPortfolio])
+
   const loadQuotes = useCallback(async (syms: string[]) => {
     if (!syms.length) return
     try {
@@ -446,17 +504,17 @@ export default function PortfoliosIA() {
   }, [])
 
   useEffect(() => {
-    const syms = quoteSymbolsFromPortfolios(mergedPortfolios)
+    const syms = quoteSymbolsFromPortfolios(allPortfolios)
     void loadQuotes(syms)
-  }, [mergedPortfolios, loadQuotes])
+  }, [allPortfolios, loadQuotes])
 
   useEffect(() => {
-    const syms = quoteSymbolsFromPortfolios(mergedPortfolios)
+    const syms = quoteSymbolsFromPortfolios(allPortfolios)
     const id = window.setInterval(() => {
       void loadQuotes(syms)
     }, 30_000)
     return () => clearInterval(id)
-  }, [mergedPortfolios, loadQuotes])
+  }, [allPortfolios, loadQuotes])
 
   const fetchOperations = useCallback(async () => {
     try {
@@ -601,6 +659,8 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
   }, [pfEditId, editCap, editPosRows, editOpRows, iaOverrides, mergedPortfolios])
 
   const renderDetail = (p: PortfolioIA) => {
+    const isIngeld = p.id === 'ingeld'
+    const ing = isIngeld ? ingeldPortfolio : null
     const ret = totalReturnPct(p)
     const retHoy = weightedDayReturnPct(p, quotes)
     const vsSpy = spyBench != null ? Math.round((ret - spyBench) * 100) / 100 : null
@@ -624,10 +684,16 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
             color: 'var(--text-heading)',
           }}
         >
-          📊 Posiciones y retornos basados en datos públicos de Autopilot · Actualización semanal{' '}
-          <a href={autopilotUrl} target="_blank" rel="noopener noreferrer">
-            Autopilot
-          </a>
+          {isIngeld ? (
+            <>🧠 Este portfolio fue generado por INGELD IA analizando 30 activos de mercados globales. Se actualiza cada lunes.</>
+          ) : (
+            <>
+              📊 Posiciones y retornos basados en datos públicos de Autopilot · Actualización semanal{' '}
+              <a href={autopilotUrl} target="_blank" rel="noopener noreferrer">
+                Autopilot
+              </a>
+            </>
+          )}
         </div>
 
         {isAdmin ? (
@@ -635,48 +701,59 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
             <button
               type="button"
               className="portfolio-refresh-btn"
-              onClick={() => setPfEditId(p.id)}
+              onClick={() => {
+                if (isIngeld) void loadIngeldPortfolio(true)
+                else setPfEditId(p.id)
+              }}
             >
-              🔄 Actualizar datos
+              {isIngeld
+                ? ingeldLoading
+                  ? 'Regenerando…'
+                  : 'Regenerar portfolio'
+                : '🔄 Actualizar datos'}
             </button>
           </div>
         ) : null}
 
-        <a
-          href={autopilotUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            display: 'block',
-            textAlign: 'center',
-            padding: '0.95rem 1.25rem',
-            marginTop: '0.85rem',
-            marginBottom: '1rem',
-            fontSize: '1.06rem',
-            fontWeight: 700,
-            background: '#00a87a',
-            color: '#fff',
-            borderRadius: 'var(--radius)',
-            textDecoration: 'none',
-            boxShadow: '0 4px 14px rgba(0, 168, 122, 0.35)',
-          }}
-        >
-          Invertir con este portfolio en Autopilot →
-        </a>
-        <p
-          className="font-prose"
-          style={{
-            marginTop: '-0.25rem',
-            marginBottom: '1rem',
-            fontSize: '0.86rem',
-            lineHeight: 1.5,
-            color: 'var(--text-muted)',
-          }}
-        >
-          Para copiar las operaciones automáticamente necesitás crear cuenta en Autopilot
-          ($29/trimestre). Los datos de posiciones que ves acá se actualizan semanalmente
-          desde fuentes públicas.
-        </p>
+        {!isIngeld ? (
+          <>
+            <a
+              href={autopilotUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'block',
+                textAlign: 'center',
+                padding: '0.95rem 1.25rem',
+                marginTop: '0.85rem',
+                marginBottom: '1rem',
+                fontSize: '1.06rem',
+                fontWeight: 700,
+                background: '#00a87a',
+                color: '#fff',
+                borderRadius: 'var(--radius)',
+                textDecoration: 'none',
+                boxShadow: '0 4px 14px rgba(0, 168, 122, 0.35)',
+              }}
+            >
+              Invertir con este portfolio en Autopilot →
+            </a>
+            <p
+              className="font-prose"
+              style={{
+                marginTop: '-0.25rem',
+                marginBottom: '1rem',
+                fontSize: '0.86rem',
+                lineHeight: 1.5,
+                color: 'var(--text-muted)',
+              }}
+            >
+              Para copiar las operaciones automáticamente necesitás crear cuenta en Autopilot
+              ($29/trimestre). Los datos de posiciones que ves acá se actualizan semanalmente
+              desde fuentes públicas.
+            </p>
+          </>
+        ) : null}
 
         <article className="ai-pf-card" style={{ borderColor: `${accent}44` }}>
           <div className="ai-pf-card-head">
@@ -686,12 +763,43 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
               aria-hidden
             />
             <div>
-              <h2 className="ai-pf-card-title">{p.nombre}</h2>
+              <h2 className="ai-pf-card-title">{isIngeld ? 'Portfolio INGELD' : p.nombre}</h2>
               <p className="ai-pf-card-sub">
-                {p.gestor} · {p.plataforma}
+                {isIngeld ? 'Generado por IA · Actualizado semanalmente' : `${p.gestor} · ${p.plataforma}`}
               </p>
             </div>
           </div>
+          {isIngeld ? (
+            <>
+              <div
+                className="font-prose"
+                style={{
+                  marginBottom: '0.85rem',
+                  padding: '0.75rem 0.9rem',
+                  borderRadius: 8,
+                  background: 'rgba(0, 168, 122, 0.08)',
+                  border: '1px solid rgba(0, 168, 122, 0.25)',
+                }}
+              >
+                <strong>Tesis:</strong> {ing?.tesis || '—'}
+              </div>
+              <p className="ai-pf-metric-hint" style={{ marginTop: '-0.2rem', marginBottom: '0.7rem' }}>
+                Retorno esperado: <strong>{ing?.retorno_esperado || '—'}</strong>
+              </p>
+              <div
+                className="font-prose"
+                style={{
+                  marginBottom: '0.7rem',
+                  padding: '0.7rem 0.9rem',
+                  borderRadius: 8,
+                  background: 'rgba(192, 41, 62, 0.08)',
+                  border: '1px solid rgba(192, 41, 62, 0.3)',
+                }}
+              >
+                <strong>Riesgo principal:</strong> {ing?.riesgo_principal || '—'}
+              </div>
+            </>
+          ) : null}
           <div className="ai-pf-metrics">
             <div>
               <p className="ai-pf-metric-label">Capital actual</p>
@@ -743,14 +851,16 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
             </div>
           </div>
           <div className="ai-pf-actions">
-            <a
-              className="ai-pf-btn ai-pf-btn--ghost"
-              href={`https://twitter.com/${p.twitter.replace('@', '')}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Twitter/X
-            </a>
+            {!isIngeld ? (
+              <a
+                className="ai-pf-btn ai-pf-btn--ghost"
+                href={`https://twitter.com/${p.twitter.replace('@', '')}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Twitter/X
+              </a>
+            ) : null}
           </div>
         </article>
 
@@ -784,7 +894,13 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
                       <p className="ai-pf-price-row">
                         <span className="ai-pf-muted">Precio</span>
                         <span>
-                          {q ? q.price.toLocaleString('es-AR', { maximumFractionDigits: 4 }) : '—'}
+                          {isIngeld
+                            ? row.precio_actual != null
+                              ? row.precio_actual.toLocaleString('es-AR', { maximumFractionDigits: 4 })
+                              : '—'
+                            : q
+                              ? q.price.toLocaleString('es-AR', { maximumFractionDigits: 4 })
+                              : '—'}
                         </span>
                       </p>
                       <p className="ai-pf-price-row">
@@ -798,6 +914,11 @@ Respondé en español: diversificación, tesis inferida, mejor posición, riesgo
                           '—'
                         )}
                       </p>
+                      {isIngeld && row.razon ? (
+                        <p className="ai-pf-metric-hint" style={{ marginTop: '0.5rem' }}>
+                          {row.razon}
+                        </p>
+                      ) : null}
                     </div>
                   )
                 })}

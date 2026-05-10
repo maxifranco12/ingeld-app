@@ -1658,6 +1658,215 @@ def ai_operations() -> dict[str, Any]:
 _IDEA_SEMANAL_CACHE: dict[str, Any] = {"ts": 0.0, "payload": None}
 _IDEA_SEMANAL_TTL_SEC = 24 * 3600.0
 
+INGELD_UNIVERSE_30: list[str] = [
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+    "AMZN",
+    "META",
+    "NVDA",
+    "TSLA",
+    "JPM",
+    "V",
+    "JNJ",
+    "WMT",
+    "PG",
+    "UNH",
+    "HD",
+    "MA",
+    "BAC",
+    "DIS",
+    "NFLX",
+    "ADBE",
+    "CRM",
+    "GGAL.BA",
+    "BMA.BA",
+    "PAMP.BA",
+    "YPFD.BA",
+    "TXAR.BA",
+    "TECO2.BA",
+    "BTC-USD",
+    "ETH-USD",
+    "SPY",
+    "QQQ",
+]
+_INGELD_PORTFOLIO_CACHE: dict[str, Any] = {"ts": 0.0, "payload": None}
+_INGELD_PORTFOLIO_TTL_SEC = 24 * 3600.0
+
+
+def _ingeld_universe_row(sym: str) -> dict[str, Any] | None:
+    try:
+        t = yf.Ticker(sym)
+        hist = t.history(period="6mo", interval="1d")
+        if hist is None or hist.empty:
+            return None
+        close = hist["Close"].astype(float)
+        last = float(close.iloc[-1])
+        prev = float(close.iloc[-2]) if len(close) > 1 else last
+        chg = ((last - prev) / prev * 100.0) if prev else 0.0
+        info = t.info or {}
+        f = fundamentals_from_info(info)
+        return {
+            "ticker": sym,
+            "nombre": str(info.get("shortName") or info.get("longName") or sym),
+            "sector": str(f.get("sector") or info.get("sector") or "Other"),
+            "precio": round(last, 4),
+            "changePct": round(chg, 2),
+            "rsi": _rsi(close),
+            "pe": _safe_float(f.get("pe_ratio")),
+            "revenue_growth": _safe_float(f.get("revenue_growth")),
+            "dividend_yield": _safe_float(f.get("dividend_yield")),
+        }
+    except Exception:
+        return None
+
+
+def _ingeld_fallback_payload(rows: list[dict[str, Any]], today_iso: str) -> dict[str, Any]:
+    scored = []
+    for r in rows:
+        rg = _safe_float(r.get("revenue_growth")) or 0.0
+        dy = _safe_float(r.get("dividend_yield")) or 0.0
+        rsi = _safe_float(r.get("rsi")) or 50.0
+        ch = _safe_float(r.get("changePct")) or 0.0
+        pe = _safe_float(r.get("pe"))
+        pe_score = 0.0 if pe is None else (30 - min(30.0, max(0.0, pe))) / 30.0
+        score = rg * 100 * 0.45 + dy * 100 * 0.20 + pe_score * 100 * 0.20 + ch * 0.10 + (
+            100 - abs(rsi - 50) * 2
+        ) * 0.05
+        scored.append((score, r))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    top = [r for _, r in scored[:10]]
+    if not top:
+        top = rows[:10]
+    n = len(top) or 1
+    base = [14, 13, 12, 11, 10, 10, 9, 8, 7, 6]
+    if n != 10:
+        per = round(100 / n)
+        base = [per for _ in range(n)]
+    pos = []
+    for i, r in enumerate(top):
+        pos.append(
+            {
+                "ticker": r.get("ticker"),
+                "nombre": r.get("nombre") or r.get("ticker"),
+                "peso": base[i] if i < len(base) else max(1, round(100 / n)),
+                "sector": r.get("sector") or "Other",
+                "razon": "Selección cuantitativa fallback por momentum, crecimiento y valuación.",
+                "precio_actual": _safe_float(r.get("precio")) or 0,
+            }
+        )
+    return {
+        "nombre": "INGELD Portfolio Semana IA",
+        "fecha": today_iso,
+        "tesis": (
+            "Portafolio balanceado entre tecnología de calidad, defensivos y beta táctica, "
+            "priorizando crecimiento de ingresos, solidez relativa y momentum controlado."
+        ),
+        "posiciones": pos,
+        "riesgo_principal": "Shock macro que eleve correlaciones y reduzca múltiplos simultáneamente.",
+        "retorno_esperado": "8-15% en 3 meses",
+        "benchmark": "SPY",
+    }
+
+
+@router.get("/ingeld-portfolio")
+def ingeld_portfolio(force: bool = Query(False, description="Regenera ignorando caché")) -> dict[str, Any]:
+    now = time.time()
+    cached = _INGELD_PORTFOLIO_CACHE.get("payload")
+    ts = float(_INGELD_PORTFOLIO_CACHE.get("ts") or 0.0)
+    if (not force) and cached is not None and now - ts < _INGELD_PORTFOLIO_TTL_SEC:
+        return copy.deepcopy(cached)
+
+    rows: list[dict[str, Any]] = []
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        for row in ex.map(_ingeld_universe_row, INGELD_UNIVERSE_30):
+            if row is not None:
+                rows.append(row)
+    today_iso = date.today().isoformat()
+    key = (os.getenv("ANTHROPIC_API_KEY") or "").strip()
+
+    if not rows:
+        raise HTTPException(status_code=502, detail="No se pudieron obtener métricas del universo.")
+
+    data: dict[str, Any]
+    if not key:
+        data = _ingeld_fallback_payload(rows, today_iso)
+    else:
+        prompt = (
+            "Sos el analista senior de INGELD. Tu trabajo es armar el mejor portfolio de 10 "
+            "acciones para esta semana basándote en análisis técnico + fundamental.\n\n"
+            "Datos del mercado:\n"
+            + json.dumps(rows, ensure_ascii=False, indent=2)
+            + '\n\nRespondé SOLO JSON válido:\n{\n'
+            + '  "nombre": "INGELD Portfolio Semana X",\n'
+            + f'  "fecha": "{today_iso}",\n'
+            + '  "tesis": "Párrafo explicando la tesis macro",\n'
+            + '  "posiciones": [\n'
+            + "    {\n"
+            + '      "ticker": "AAPL",\n'
+            + '      "nombre": "Apple Inc.",\n'
+            + '      "peso": 12,\n'
+            + '      "sector": "Technology",\n'
+            + '      "razon": "Una oración de por qué"\n'
+            + "    }\n"
+            + "  ],\n"
+            + '  "riesgo_principal": "Una oración",\n'
+            + '  "retorno_esperado": "10-15% en 3 meses",\n'
+            + '  "benchmark": "SPY"\n'
+            + "}"
+        )
+        try:
+            client = Anthropic(api_key=key)
+            msg = client.messages.create(
+                model="claude-sonnet-4-5",
+                max_tokens=1800,
+                system="Respondé SOLO JSON válido, sin markdown.",
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text").strip()
+            raw = text
+            if "```" in raw:
+                for chunk in raw.split("```"):
+                    c = chunk.strip()
+                    if c.lower().startswith("json"):
+                        c = c[4:].lstrip()
+                    if c.startswith("{") and c.endswith("}"):
+                        raw = c
+                        break
+            data = json.loads(raw)
+        except Exception:
+            data = _ingeld_fallback_payload(rows, today_iso)
+
+    by_ticker = {str(r.get("ticker") or "").upper(): r for r in rows}
+    posiciones = []
+    for p in list(data.get("posiciones") or [])[:10]:
+        tkr = str(p.get("ticker") or "").upper()
+        m = by_ticker.get(tkr, {})
+        posiciones.append(
+            {
+                "ticker": tkr,
+                "nombre": str(p.get("nombre") or m.get("nombre") or tkr),
+                "peso": float(_safe_float(p.get("peso")) or 0),
+                "sector": str(p.get("sector") or m.get("sector") or "Other"),
+                "razon": str(p.get("razon") or "").strip(),
+                "precio_actual": float(_safe_float(m.get("precio")) or 0),
+            }
+        )
+
+    payload = {
+        "id": "ingeld",
+        "nombre": str(data.get("nombre") or "INGELD Portfolio Semana IA"),
+        "fecha": str(data.get("fecha") or today_iso),
+        "tesis": str(data.get("tesis") or "").strip(),
+        "posiciones": posiciones,
+        "riesgo_principal": str(data.get("riesgo_principal") or "").strip(),
+        "retorno_esperado": str(data.get("retorno_esperado") or "8-15% en 3 meses").strip(),
+        "benchmark": str(data.get("benchmark") or "SPY").strip().upper(),
+    }
+    _INGELD_PORTFOLIO_CACHE["ts"] = now
+    _INGELD_PORTFOLIO_CACHE["payload"] = copy.deepcopy(payload)
+    return payload
+
 
 @router.get("/idea-semanal")
 def idea_semanal() -> dict[str, Any]:
