@@ -5977,3 +5977,244 @@ button {
   margin-top: 1.25rem;
   align-items: center;
 }
+
+/* --- Screener, Backtest, Insiders, Earnings, Heatmap, Watchlist table --- */
+.screener-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) 1fr;
+  gap: 1.25rem;
+  align-items: start;
+  margin-top: 1rem;
+}
+
+@media (max-width: 960px) {
+  .screener-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.screener-filters {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  box-shadow: var(--shadow);
+}
+
+.screener-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.screener-filters input,
+.screener-filters select {
+  width: 100%;
+}
+
+.screener-results {
+  min-width: 0;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.data-table th,
+.data-table td {
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0.45rem 0.5rem;
+  text-align: left;
+}
+
+.data-table th {
+  background: #f6f4ef;
+  font-weight: 700;
+}
+
+.table-sort-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0;
+  color: var(--text-heading);
+}
+
+.table-sort-btn:hover {
+  color: #00a87a;
+}
+
+.data-table .gain {
+  color: #0a7c52;
+  font-weight: 600;
+}
+
+.data-table .loss {
+  color: #c0293e;
+  font-weight: 600;
+}
+
+.backtest-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem 1rem;
+  align-items: end;
+  margin-top: 1rem;
+}
+
+.backtest-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.backtest-results {
+  margin-top: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.equity-curve {
+  min-height: 300px;
+}
+
+.insider-table-wrap {
+  overflow-x: auto;
+}
+
+.insider-table {
+  min-width: 520px;
+}
+
+.earnings-calendar {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.earnings-week-title {
+  font-size: 1rem;
+  margin: 0 0 0.65rem;
+  color: var(--text-heading);
+}
+
+.earnings-week-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.earnings-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.85rem;
+  box-shadow: var(--shadow);
+}
+
+.earnings-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.2rem 0.45rem;
+  border-radius: 6px;
+  background: #00a87a;
+  color: #fff;
+}
+
+.heatmap-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: stretch;
+}
+
+.heatmap-cell {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 52px;
+  min-width: 72px;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #1a1c20;
+  font-weight: 700;
+  font-size: 0.72rem;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  transition: transform 0.12s ease;
+}
+
+.heatmap-cell:hover {
+  transform: scale(1.02);
+  z-index: 1;
+}
+
+.heatmap-cell.gain {
+  background: linear-gradient(135deg, rgba(10, 124, 82, 0.45), rgba(10, 124, 82, 0.85));
+  color: #fff;
+}
+
+.heatmap-cell.loss {
+  background: linear-gradient(135deg, rgba(192, 41, 62, 0.45), rgba(192, 41, 62, 0.88));
+  color: #fff;
+}
+
+.heatmap-ticker {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.heatmap-chg {
+  font-size: 0.68rem;
+  opacity: 0.95;
+}
+
+.watchlist-table-wrap {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
+.watchlist-table {
+  min-width: 640px;
+}
+
+.watchlist-rsi {
+  display: inline-block;
+  padding: 0.12rem 0.4rem;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+}
+
+.watchlist-rsi--low {
+  background: rgba(10, 124, 82, 0.2);
+  color: #0a7c52;
+}
+
+.watchlist-rsi--high {
+  background: rgba(192, 41, 62, 0.18);
+  color: #c0293e;
+}
+
+.watchlist-rsi--mid {
+  background: rgba(100, 100, 100, 0.1);
+  color: var(--text);
+}
+
+.watchlist-rsi--na {
+  color: var(--text-muted);
+}

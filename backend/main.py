@@ -17,7 +17,7 @@ from passlib.context import CryptContext
 
 from database import SessionLocal, User, UserProfile, init_db
 from routers import admin as admin_router
-from routers import alerts, analysis, auth as auth_router, market, news
+from routers import alerts, analysis, auth as auth_router, market, market_extensions, news
 from routers.chat import router as chat_router
 from routers.scanner import router as scanner_router
 
@@ -73,6 +73,7 @@ app.add_middleware(
 app.include_router(auth_router.router, prefix="/api/auth", tags=["auth"])
 app.include_router(admin_router.router, prefix="/api/admin", tags=["admin"])
 app.include_router(market.router, prefix="/api/market", tags=["market"])
+app.include_router(market_extensions.router, prefix="/api/market", tags=["market"])
 app.include_router(analysis.router, prefix="/api/analysis", tags=["analysis"])
 app.include_router(news.router, prefix="/api/news", tags=["news"])
 app.include_router(alerts.router, prefix="/api/alerts", tags=["alerts"])

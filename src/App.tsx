@@ -23,6 +23,11 @@ import { NetWorth } from './pages/NetWorth'
 import PortfoliosIA from './pages/PortfoliosIA'
 import StockLab from './pages/StockLab'
 import IdeaSemana from './pages/IdeaSemana'
+import Screener from './pages/Screener'
+import Backtest from './pages/Backtest'
+import Insiders from './pages/Insiders'
+import Earnings from './pages/Earnings'
+import Heatmap from './pages/Heatmap'
 
 function RootRoute() {
   const { isAuthenticated, loading } = useAuth()
@@ -58,6 +63,11 @@ export default function App() {
             <Route path="portfolios-ia" element={<PortfoliosIA />} />
             <Route path="stock-lab" element={<StockLab />} />
             <Route path="idea-semanal" element={<IdeaSemana />} />
+            <Route path="screener" element={<Screener />} />
+            <Route path="backtest" element={<Backtest />} />
+            <Route path="insiders" element={<Insiders />} />
+            <Route path="earnings" element={<Earnings />} />
+            <Route path="heatmap" element={<Heatmap />} />
             <Route path="admin" element={<AdminOnly />} />
           </Route>
         </Route>

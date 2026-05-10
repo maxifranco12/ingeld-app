@@ -8,15 +8,20 @@ const navBeforePf: { to: string; label: string; end?: boolean }[] = [
   { to: '/buscador', label: 'Buscador' },
   { to: '/stock-lab', label: 'Stock Lab' },
   { to: '/scanner', label: 'Scanner' },
-  { to: '/favoritos', label: 'Favoritos' },
+  { to: '/screener', label: 'Screener' },
+  { to: '/heatmap', label: 'Heatmap' },
+  { to: '/favoritos', label: 'Watchlist' },
 ]
 
 const navAfterPf: { to: string; label: string; end?: boolean }[] = [
   { to: '/alertas', label: 'Alertas' },
   { to: '/analisis', label: 'Análisis' },
-  { to: '/portfolios-ia', label: 'Portfolios IA' },
   { to: '/idea-semanal', label: '💡 Idea' },
+  { to: '/portfolios-ia', label: 'Portfolios IA' },
   { to: '/comparador', label: 'Comparador' },
+  { to: '/backtest', label: 'Backtest' },
+  { to: '/insiders', label: 'Insiders' },
+  { to: '/earnings', label: 'Earnings' },
 ]
 
 const PF_ROUTES = ['/portfolio', '/metas', '/networth']
